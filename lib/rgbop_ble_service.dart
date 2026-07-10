@@ -16,14 +16,14 @@ class RGBopBleService {
   // 1. Scan exclusively for the RGBop matrix panel
   Future<void> scanForRGBop() async {
     // Check if the physical Bluetooth radio is turned on
-print("[BLE] Waiting for iOS Bluetooth manager to wake up...");
+debugPrint("[BLE] Waiting for iOS Bluetooth manager to wake up...");
     
     // Wait until the adapter state explicitly reports 'on' before continuing
     await FlutterBluePlus.adapterState
         .where((state) => state == BluetoothAdapterState.on)
         .first;
         
-    print("[BLE] Adapter is ON. Proceeding with scan.");
+    debugPrint("[BLE] Adapter is ON. Proceeding with scan.");
 
     debugPrint("[BLE] Starting targeted scan for RGBop-Setup...");
     

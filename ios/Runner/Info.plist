@@ -66,5 +66,9 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+        <key>NSBluetoothAlwaysUsageDescription</key>
+                <string>RGBop needs Bluetooth to securely send your Wi-Fi credentials to the panel.</string>
+        <key>NSBluetoothPeripheralUsageDescription</key>
+                <string>RGBop uses Bluetooth to connect to your local matrix displays.</string>
 </dict>
 </plist>

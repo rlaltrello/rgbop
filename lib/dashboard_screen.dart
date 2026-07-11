@@ -26,11 +26,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _showISS = true;
   bool _showPlanes = true;
   bool _showTextBlast = true;
+  double _brightness = 128;
+  bool _nightMode = false;
+  int _nightStart = 22;
+  int _nightEnd = 6;
 
   final TextEditingController _latCtrl = TextEditingController();
   final TextEditingController _lngCtrl = TextEditingController();
   final TextEditingController _osUserCtrl = TextEditingController();
   final TextEditingController _osPassCtrl = TextEditingController();
+  
+  String _formatHour(int h) {
+    if (h == 0) return "12 AM";
+    if (h == 12) return "12 PM";
+    return h > 12 ? "${h - 12} PM" : "$h AM";
+  }
 
   @override
   void initState() {
@@ -65,6 +75,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _showISS = data['iss'] ?? true;
           _showPlanes = data['planes'] ?? true;
           _showTextBlast = data['textblast'] ?? true;
+          _brightness = (data['brightness'] ?? 128).toDouble();
+          _nightMode = data['nightMode'] ?? false;
+          _nightStart = data['nightStart'] ?? 22;
+          _nightEnd = data['nightEnd'] ?? 6;
           
           _latCtrl.text = (data['lat'] ?? 34.16).toString();
           _lngCtrl.text = (data['lng'] ?? -84.80).toString();
@@ -94,7 +108,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "lat": double.tryParse(_latCtrl.text) ?? 34.16,
         "lng": double.tryParse(_lngCtrl.text) ?? -84.80,
         "osUser": _osUserCtrl.text,
-        "osPass": _osPassCtrl.text
+        "osPass": _osPassCtrl.text,
+        "brightness": _brightness.toInt(),
+        "nightMode": _nightMode,
+        "nightStart": _nightStart,
+        "nightEnd": _nightEnd,
       });
 
       final response = await http.post(
@@ -181,6 +199,70 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
+          // --- DISPLAY & BRIGHTNESS ---
+          Card(
+            color: const Color(0xFF1E1E1E),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.lightbulb_outline, color: Colors.amberAccent),
+                      SizedBox(width: 16),
+                      Text("Display & Brightness", style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  const Text("Global Brightness"),
+                  Slider(
+                    value: _brightness,
+                    min: 1,
+                    max: 255,
+                    divisions: 254,
+                    activeColor: Colors.amberAccent,
+                    label: _brightness.round().toString(),
+                    onChanged: (val) {
+                      setState(() => _brightness = val);
+                      // Optional UX: If you drag the slider, you might want to auto-save 
+                      // when dragging ends, or let the user hit the save button.
+                    },
+                  ),
+                  SwitchListTile(
+                    contentPadding: EdgeInsets.zero,
+                    title: const Text("Night Mode (Dim to Near Zero)"),
+                    activeThumbColor: Colors.amberAccent,
+                    value: _nightMode,
+                    onChanged: (val) => setState(() => _nightMode = val),
+                  ),
+                  if (_nightMode) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text("Quiet Hours:"),
+                        DropdownButton<int>(
+                          value: _nightStart,
+                          dropdownColor: const Color(0xFF2A2A2A),
+                          items: List.generate(24, (i) => DropdownMenuItem(value: i, child: Text(_formatHour(i)))),
+                          onChanged: (val) => setState(() => _nightStart = val!),
+                        ),
+                        const Text("to"),
+                        DropdownButton<int>(
+                          value: _nightEnd,
+                          dropdownColor: const Color(0xFF2A2A2A),
+                          items: List.generate(24, (i) => DropdownMenuItem(value: i, child: Text(_formatHour(i)))),
+                          onChanged: (val) => setState(() => _nightEnd = val!),
+                        ),
+                      ],
+                    )
+                  ]
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
           const SizedBox(height: 16),
           // --- MEDIA MANAGEMENT ---
           Card(

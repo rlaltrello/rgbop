@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 import 'rgbop_mdns_service.dart';
 import 'gif_manager_screen.dart';
+import 'package:geolocator/geolocator.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -30,6 +31,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _nightMode = false;
   int _nightStart = 22;
   int _nightEnd = 6;
+  bool _isFetchingLocation = false;
 
   final TextEditingController _latCtrl = TextEditingController();
   final TextEditingController _lngCtrl = TextEditingController();
@@ -40,6 +42,57 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (h == 0) return "12 AM";
     if (h == 12) return "12 PM";
     return h > 12 ? "${h - 12} PM" : "$h AM";
+  }
+  
+  Future<void> _getCurrentLocation() async {
+    setState(() => _isFetchingLocation = true);
+    
+    try {
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        throw Exception("Location services are disabled on this device.");
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          throw Exception("Location permission denied.");
+        }
+      }
+      
+      if (permission == LocationPermission.deniedForever) {
+        throw Exception("Location permissions are permanently denied. Please enable in settings.");
+      }
+
+      // FIX: Use the new locationSettings parameter instead of the deprecated desiredAccuracy
+      Position position = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
+      );
+
+      setState(() {
+        // FIX: Match your specific TextEditingController names
+        _latCtrl.text = position.latitude.toStringAsFixed(4);
+        _lngCtrl.text = position.longitude.toStringAsFixed(4);
+      });
+      
+    } catch (e) {
+      // FIX: Add the mounted check before using context across an async gap
+      if (!mounted) return; 
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(e.toString(), style: const TextStyle(color: Colors.white)), 
+          backgroundColor: Colors.redAccent
+        )
+      );
+    } finally {
+      if (mounted) {
+        setState(() => _isFetchingLocation = false);
+      }
+    }
   }
 
   @override
@@ -162,7 +215,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  @override
+@override
   Widget build(BuildContext context) {
     if (_isLoading) {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
@@ -177,175 +230,227 @@ class _DashboardScreenState extends State<DashboardScreen> {
               : IconButton(icon: const Icon(Icons.save, color: Colors.blueAccent), onPressed: _saveSettings),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
-          // --- WIDGET TOGGLES ---
-          Card(
-            color: const Color(0xFF1E1E1E),
-            child: Column(
-              children: [
-                const ListTile(
-                  title: Text("Active Widgets", style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
-                  leading: Icon(Icons.dashboard, color: Colors.blueAccent),
-                ),
-                SwitchListTile(title: const Text("GIFs"), value: _showGifs, onChanged: (v) => setState(() => _showGifs = v)),
-                SwitchListTile(title: const Text("Clocks"), value: _showClock, onChanged: (v) => setState(() => _showClock = v)),
-                SwitchListTile(title: const Text("Date Progress"), value: _showDate, onChanged: (v) => setState(() => _showDate = v)),
-                SwitchListTile(title: const Text("Weather"), value: _showWeather, onChanged: (v) => setState(() => _showWeather = v)),
-                SwitchListTile(title: const Text("ISS Tracker"), value: _showISS, onChanged: (v) => setState(() => _showISS = v)),
-                SwitchListTile(title: const Text("Planes"), value: _showPlanes, onChanged: (v) => setState(() => _showPlanes = v)),
-                SwitchListTile(title: const Text("Text Blast"), value: _showTextBlast, onChanged: (v) => setState(() => _showTextBlast = v)),
-              ],
-            ),
-          ),
-          // --- DISPLAY & BRIGHTNESS ---
-          Card(
-            color: const Color(0xFF1E1E1E),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      
+      // 1. ADD THE GESTURE DETECTOR HERE TO FIX THE KEYBOARD
+      body: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        
+        // 2. YOUR LISTVIEW BECOMES THE CHILD
+        child: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            
+            // --- PANEL IP HEADER ---
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16.0, top: 8.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.lightbulb_outline, color: Colors.amberAccent),
-                      SizedBox(width: 16),
-                      Text("Display & Brightness", style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 16)),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                  const Text("Global Brightness"),
-                  Slider(
-                    value: _brightness,
-                    min: 1,
-                    max: 255,
-                    divisions: 254,
-                    activeColor: Colors.amberAccent,
-                    label: _brightness.round().toString(),
-                    onChanged: (val) {
-                      setState(() => _brightness = val);
-                      // Optional UX: If you drag the slider, you might want to auto-save 
-                      // when dragging ends, or let the user hit the save button.
-                    },
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: const Text("Night Mode (Dim to Near Zero)"),
-                    activeThumbColor: Colors.amberAccent,
-                    value: _nightMode,
-                    onChanged: (val) => setState(() => _nightMode = val),
-                  ),
-                  if (_nightMode) ...[
-                    const SizedBox(height: 8),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Text("Quiet Hours:"),
-                        DropdownButton<int>(
-                          value: _nightStart,
-                          dropdownColor: const Color(0xFF2A2A2A),
-                          items: List.generate(24, (i) => DropdownMenuItem(value: i, child: Text(_formatHour(i)))),
-                          onChanged: (val) => setState(() => _nightStart = val!),
-                        ),
-                        const Text("to"),
-                        DropdownButton<int>(
-                          value: _nightEnd,
-                          dropdownColor: const Color(0xFF2A2A2A),
-                          items: List.generate(24, (i) => DropdownMenuItem(value: i, child: Text(_formatHour(i)))),
-                          onChanged: (val) => setState(() => _nightEnd = val!),
-                        ),
-                      ],
-                    )
-                  ]
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          const SizedBox(height: 16),
-          // --- MEDIA MANAGEMENT ---
-          Card(
-            color: const Color(0xFF1E1E1E),
-            child: ListTile(
-              leading: const Icon(Icons.gif_box, color: Colors.blueAccent),
-              title: const Text("Manage GIFs", style: TextStyle(fontWeight: FontWeight.bold)),
-              subtitle: const Text("Upload and delete panel animations"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                if (_panelIp != null) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => GifManagerScreen(panelIp: _panelIp!),
+                  const Icon(Icons.wifi, color: Colors.grey, size: 16),
+                  const SizedBox(width: 8),
+                  Text(
+                    "Panel IP = $_panelIp",
+                    style: const TextStyle(
+                      color: Colors.grey, 
+                      fontSize: 14, 
+                      fontWeight: FontWeight.w500,
+                      letterSpacing: 1.1,
                     ),
-                  );
-                }
-              },
-            ),
-          ),
-          const SizedBox(height: 16),
-          // --- LOCATION ---
-          Card(
-            color: const Color(0xFF1E1E1E),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.location_on, color: Colors.blueAccent),
-                      SizedBox(width: 16),
-                      Text("Location Settings", style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16)),
-                    ],
                   ),
-                  const SizedBox(height: 16),
-                  TextField(controller: _latCtrl, decoration: const InputDecoration(labelText: "Latitude", border: OutlineInputBorder()), keyboardType: TextInputType.number),
-                  const SizedBox(height: 16),
-                  TextField(controller: _lngCtrl, decoration: const InputDecoration(labelText: "Longitude", border: OutlineInputBorder()), keyboardType: TextInputType.number),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 16),
-
-          // --- OPENSKY ---
-          Card(
-            color: const Color(0xFF1E1E1E),
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
+            
+            // --- WIDGET TOGGLES ---
+            Card(
+              color: const Color(0xFF1E1E1E),
               child: Column(
                 children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.flight, color: Colors.blueAccent),
-                      SizedBox(width: 16),
-                      Text("OpenSky API", style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16)),
-                    ],
+                  const ListTile(
+                    title: Text("Active Widgets", style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold)),
+                    leading: Icon(Icons.dashboard, color: Colors.blueAccent),
                   ),
-                  const SizedBox(height: 16),
-                  TextField(controller: _osUserCtrl, decoration: const InputDecoration(labelText: "Username", border: OutlineInputBorder())),
-                  const SizedBox(height: 16),
-                  TextField(controller: _osPassCtrl, decoration: const InputDecoration(labelText: "Password", border: OutlineInputBorder()), obscureText: true),
+                  SwitchListTile(title: const Text("GIFs"), value: _showGifs, onChanged: (v) => setState(() => _showGifs = v)),
+                  SwitchListTile(title: const Text("Clocks"), value: _showClock, onChanged: (v) => setState(() => _showClock = v)),
+                  SwitchListTile(title: const Text("Date Progress"), value: _showDate, onChanged: (v) => setState(() => _showDate = v)),
+                  SwitchListTile(title: const Text("Weather"), value: _showWeather, onChanged: (v) => setState(() => _showWeather = v)),
+                  SwitchListTile(title: const Text("ISS Tracker"), value: _showISS, onChanged: (v) => setState(() => _showISS = v)),
+                  SwitchListTile(title: const Text("Planes"), value: _showPlanes, onChanged: (v) => setState(() => _showPlanes = v)),
+                  SwitchListTile(title: const Text("Text Blast"), value: _showTextBlast, onChanged: (v) => setState(() => _showTextBlast = v)),
                 ],
               ),
             ),
-          ),
-          const SizedBox(height: 32),
-
-          // --- DANGER ZONE ---
-          ElevatedButton.icon(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
-              foregroundColor: Colors.redAccent,
-              padding: const EdgeInsets.symmetric(vertical: 16),
+            const SizedBox(height: 16),
+            
+            // --- DISPLAY & BRIGHTNESS ---
+            Card(
+              color: const Color(0xFF1E1E1E),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.lightbulb_outline, color: Colors.amberAccent),
+                        SizedBox(width: 16),
+                        Text("Display & Brightness", style: TextStyle(color: Colors.amberAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Text("Global Brightness"),
+                    Slider(
+                      value: _brightness,
+                      min: 1,
+                      max: 255,
+                      divisions: 254,
+                      activeColor: Colors.amberAccent,
+                      label: _brightness.round().toString(),
+                      onChanged: (val) {
+                        setState(() => _brightness = val);
+                      },
+                    ),
+                    SwitchListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: const Text("Night Mode (Dim to Near Zero)"),
+                      activeThumbColor: Colors.amberAccent,
+                      value: _nightMode,
+                      onChanged: (val) => setState(() => _nightMode = val),
+                    ),
+                    if (_nightMode) ...[
+                      const SizedBox(height: 8),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text("Quiet Hours:"),
+                          DropdownButton<int>(
+                            value: _nightStart,
+                            dropdownColor: const Color(0xFF2A2A2A),
+                            items: List.generate(24, (i) => DropdownMenuItem(value: i, child: Text(_formatHour(i)))),
+                            onChanged: (val) => setState(() => _nightStart = val!),
+                          ),
+                          const Text("to"),
+                          DropdownButton<int>(
+                            value: _nightEnd,
+                            dropdownColor: const Color(0xFF2A2A2A),
+                            items: List.generate(24, (i) => DropdownMenuItem(value: i, child: Text(_formatHour(i)))),
+                            onChanged: (val) => setState(() => _nightEnd = val!),
+                          ),
+                        ],
+                      )
+                    ]
+                  ],
+                ),
+              ),
             ),
-            onPressed: _isResetting ? null : _factoryResetPanel,
-            icon: _isResetting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator()) : const Icon(Icons.warning_amber_rounded),
-            label: const Text("FACTORY RESET PANEL", style: TextStyle(fontWeight: FontWeight.bold)),
-          ),
-          const SizedBox(height: 32),
-        ],
+            const SizedBox(height: 16),
+            
+            // --- MEDIA MANAGEMENT ---
+            Card(
+              color: const Color(0xFF1E1E1E),
+              child: ListTile(
+                leading: const Icon(Icons.gif_box, color: Colors.blueAccent),
+                title: const Text("Manage GIFs", style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text("Upload and delete panel animations"),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  FocusScope.of(context).unfocus();
+                  if (_panelIp != null) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => GifManagerScreen(panelIp: _panelIp!),
+                      ),
+                    );
+                  }
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // --- LOCATION ---
+            Card(
+              color: const Color(0xFF1E1E1E),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.location_on, color: Colors.blueAccent),
+                        SizedBox(width: 16),
+                        Text("Location Settings", style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    
+                    // --- NEW LOCATION BUTTON ---
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blueAccent.withValues(alpha: 0.2),
+                          foregroundColor: Colors.blueAccent,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: _isFetchingLocation ? null : _getCurrentLocation,
+                        icon: _isFetchingLocation 
+                            ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                            : const Icon(Icons.my_location),
+                        label: Text(
+                          _isFetchingLocation ? "Fetching GPS..." : "Use Current Location",
+                          style: const TextStyle(fontWeight: FontWeight.bold)
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(controller: _latCtrl, decoration: const InputDecoration(labelText: "Latitude", border: OutlineInputBorder()), keyboardType: TextInputType.number),
+                    const SizedBox(height: 16),
+                    TextField(controller: _lngCtrl, decoration: const InputDecoration(labelText: "Longitude", border: OutlineInputBorder()), keyboardType: TextInputType.number),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // --- OPENSKY ---
+            Card(
+              color: const Color(0xFF1E1E1E),
+              child: Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  children: [
+                    const Row(
+                      children: [
+                        Icon(Icons.flight, color: Colors.blueAccent),
+                        SizedBox(width: 16),
+                        Text("OpenSky API", style: TextStyle(color: Colors.blueAccent, fontWeight: FontWeight.bold, fontSize: 16)),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(controller: _osUserCtrl, decoration: const InputDecoration(labelText: "Username", border: OutlineInputBorder())),
+                    const SizedBox(height: 16),
+                    TextField(controller: _osPassCtrl, decoration: const InputDecoration(labelText: "Password", border: OutlineInputBorder()), obscureText: true),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // --- DANGER ZONE ---
+            ElevatedButton.icon(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
+                foregroundColor: Colors.redAccent,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+              ),
+              onPressed: _isResetting ? null : _factoryResetPanel,
+              icon: _isResetting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator()) : const Icon(Icons.warning_amber_rounded),
+              label: const Text("FACTORY RESET PANEL", style: TextStyle(fontWeight: FontWeight.bold)),
+            ),
+            const SizedBox(height: 32),
+          ],
+        ),
       ),
     );
   }

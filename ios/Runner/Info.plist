@@ -76,5 +76,7 @@
 		<string>UIInterfaceOrientationLandscapeLeft</string>
 		<string>UIInterfaceOrientationLandscapeRight</string>
 	</array>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>This app requires location access to set the dashboard coordinates for weather and plane tracking.</string>
 </dict>
 </plist>

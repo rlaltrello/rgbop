@@ -157,7 +157,7 @@ Future<void> _deleteGif(String filename) async {
     if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.green));
   }
 
-  @override
+@override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
@@ -169,62 +169,90 @@ Future<void> _deleteGif(String filename) async {
           )
         ],
       ),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _gifs.isEmpty
-              ? const Center(child: Text("No GIFs found on panel.", style: TextStyle(color: Colors.grey)))
-              : ListView.builder(
-                  padding: const EdgeInsets.only(top: 16, left: 16, right: 16, bottom: 100),
-                  itemCount: _gifs.length,
-                  itemBuilder: (context, index) {
-                    final gif = _gifs[index];
-                    final bool isEnabled = gif['enabled'] ?? true;
-                    
-                    return Card(
-                      color: const Color(0xFF1E1E1E),
-                      child: Opacity(
-                        opacity: isEnabled ? 1.0 : 0.4, // Gray out if disabled
-                        child: ListTile(
-                          leading: SizedBox(
-                            width: 50,
-                            height: 50,
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                'http://${widget.panelIp}/gifs/${gif['name']}',
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) => 
-                                    const Icon(Icons.broken_image, color: Colors.grey, size: 32),
+      body: Column(
+        children: [
+          // --- PANEL IP HEADER ---
+          Padding(
+            padding: const EdgeInsets.only(bottom: 8.0, top: 16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.wifi, color: Colors.grey, size: 16),
+                const SizedBox(width: 8),
+                Text(
+                  "Panel IP = ${widget.panelIp}",
+                  style: const TextStyle(
+                    color: Colors.grey, 
+                    fontSize: 14, 
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 1.1,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          
+          // --- DYNAMIC CONTENT ---
+          Expanded(
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _gifs.isEmpty
+                    ? const Center(child: Text("No GIFs found on panel.", style: TextStyle(color: Colors.grey)))
+                    : ListView.builder(
+                        padding: const EdgeInsets.only(top: 8, left: 16, right: 16, bottom: 100),
+                        itemCount: _gifs.length,
+                        itemBuilder: (context, index) {
+                          final gif = _gifs[index];
+                          final bool isEnabled = gif['enabled'] ?? true;
+                          
+                          return Card(
+                            color: const Color(0xFF1E1E1E),
+                            child: Opacity(
+                              opacity: isEnabled ? 1.0 : 0.4, // Gray out if disabled
+                              child: ListTile(
+                                leading: SizedBox(
+                                  width: 50,
+                                  height: 50,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(8),
+                                    child: Image.network(
+                                      'http://${widget.panelIp}/gifs/${gif['name']}',
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stackTrace) => 
+                                          const Icon(Icons.broken_image, color: Colors.grey, size: 32),
+                                    ),
+                                  ),
+                                ),
+                                title: Text(
+                                  // Clean up the display name for the user
+                                  gif['name'].toString().replaceAll('_', ''), 
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    decoration: isEnabled ? TextDecoration.none : TextDecoration.lineThrough,
+                                  )
+                                ),
+                                subtitle: Text(_formatBytes(gif['size'])),
+                                trailing: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: Icon(isEnabled ? Icons.visibility : Icons.visibility_off, color: Colors.blueAccent),
+                                      onPressed: () => _toggleGif(gif['name'], isEnabled),
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                                      onPressed: () => _confirmDelete(gif['name']),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
-                          ),
-                          title: Text(
-                            // Clean up the display name for the user
-                            gif['name'].toString().replaceAll('_', ''), 
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              decoration: isEnabled ? TextDecoration.none : TextDecoration.lineThrough,
-                            )
-                          ),
-                          subtitle: Text(_formatBytes(gif['size'])),
-                          trailing: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: Icon(isEnabled ? Icons.visibility : Icons.visibility_off, color: Colors.blueAccent),
-                                onPressed: () => _toggleGif(gif['name'], isEnabled),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                                onPressed: () => _confirmDelete(gif['name']),
-                              ),
-                            ],
-                          ),
-                        ),
+                          );
+                        },
                       ),
-                    );
-                  },
-                ),
+          ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: _isUploading ? null : _uploadGif,
         backgroundColor: Colors.blueAccent,

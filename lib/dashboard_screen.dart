@@ -32,6 +32,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _nightStart = 22;
   int _nightEnd = 6;
   bool _isFetchingLocation = false;
+  int _transitionTime = 10;
 
   final TextEditingController _latCtrl = TextEditingController();
   final TextEditingController _lngCtrl = TextEditingController();
@@ -132,6 +133,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _nightMode = data['nightMode'] ?? false;
           _nightStart = data['nightStart'] ?? 22;
           _nightEnd = data['nightEnd'] ?? 6;
+          _transitionTime = data['transitionTime'] ?? 10;
           
           _latCtrl.text = (data['lat'] ?? 34.16).toString();
           _lngCtrl.text = (data['lng'] ?? -84.80).toString();
@@ -166,6 +168,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "nightMode": _nightMode,
         "nightStart": _nightStart,
         "nightEnd": _nightEnd,
+        "transitionTime": _transitionTime,
       });
 
       final response = await http.post(
@@ -203,6 +206,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) setState(() => _isResetting = false);
   }
 
+  Future<void> _confirmFactoryReset() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false, // Forces the user to explicitly tap a button
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+              SizedBox(width: 8),
+              Text("Factory Reset?", style: TextStyle(color: Colors.redAccent)),
+            ],
+          ),
+          content: const Text(
+            "This will erase all Wi-Fi settings and preferences on the panel, forcing it back into Bluetooth setup mode. Are you absolutely sure?",
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+              onPressed: () => Navigator.of(context).pop(), // Just close the dialog
+            ),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+              child: const Text("Yes, Reset Panel", style: TextStyle(fontWeight: FontWeight.bold)),
+              onPressed: () {
+                Navigator.of(context).pop(); // Close the dialog first
+                _factoryResetPanel();        // Then execute the actual reset
+              },
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   void _showError(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: Colors.red));
@@ -232,11 +272,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ),
       
       // 1. ADD THE GESTURE DETECTOR HERE TO FIX THE KEYBOARD
-      body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(),
-        
-        // 2. YOUR LISTVIEW BECOMES THE CHILD
-        child: ListView(
+      body:ListView(
           padding: const EdgeInsets.all(16),
           children: [
             
@@ -277,6 +313,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   SwitchListTile(title: const Text("ISS Tracker"), value: _showISS, onChanged: (v) => setState(() => _showISS = v)),
                   SwitchListTile(title: const Text("Planes"), value: _showPlanes, onChanged: (v) => setState(() => _showPlanes = v)),
                   SwitchListTile(title: const Text("Text Blast"), value: _showTextBlast, onChanged: (v) => setState(() => _showTextBlast = v)),
+                  const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16.0),
+                  child: Divider(color: Colors.white24),
+                ),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("Widget Display Duration", style: TextStyle(color: Colors.white70)),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Slider(
+                              value: _transitionTime.toDouble(),
+                              min: 1,
+                              max: 60,
+                              divisions: 59,
+                              activeColor: Colors.blueAccent,
+                              label: "$_transitionTime sec",
+                              onChanged: (val) {
+                                setState(() => _transitionTime = val.toInt());
+                              },
+                            ),
+                          ),
+                          SizedBox(
+                            width: 40, // Fixed width prevents jumping as numbers change
+                            child: Text(
+                              "${_transitionTime}s", 
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                              textAlign: TextAlign.right,
+                            )
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
                 ],
               ),
             ),
@@ -404,9 +478,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    TextField(controller: _latCtrl, decoration: const InputDecoration(labelText: "Latitude", border: OutlineInputBorder()), keyboardType: TextInputType.number),
+                    TextField(controller: _latCtrl, decoration: const InputDecoration(labelText: "Latitude", border: OutlineInputBorder()), keyboardType: TextInputType.number,onTapOutside: (event) => FocusScope.of(context).unfocus(),),
                     const SizedBox(height: 16),
-                    TextField(controller: _lngCtrl, decoration: const InputDecoration(labelText: "Longitude", border: OutlineInputBorder()), keyboardType: TextInputType.number),
+                    TextField(controller: _lngCtrl, decoration: const InputDecoration(labelText: "Longitude", border: OutlineInputBorder()), keyboardType: TextInputType.number,onTapOutside: (event) => FocusScope.of(context).unfocus(),),
                   ],
                 ),
               ),
@@ -428,9 +502,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ],
                     ),
                     const SizedBox(height: 16),
-                    TextField(controller: _osUserCtrl, decoration: const InputDecoration(labelText: "Username", border: OutlineInputBorder())),
+                    TextField(controller: _osUserCtrl, decoration: const InputDecoration(labelText: "Username", border: OutlineInputBorder()),onTapOutside: (event) => FocusScope.of(context).unfocus(),),
                     const SizedBox(height: 16),
-                    TextField(controller: _osPassCtrl, decoration: const InputDecoration(labelText: "Password", border: OutlineInputBorder()), obscureText: true),
+                    TextField(controller: _osPassCtrl, decoration: const InputDecoration(labelText: "Password", border: OutlineInputBorder()), obscureText: true,onTapOutside: (event) => FocusScope.of(context).unfocus(),),
                   ],
                 ),
               ),
@@ -444,14 +518,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 foregroundColor: Colors.redAccent,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              onPressed: _isResetting ? null : _factoryResetPanel,
+              onPressed: _isResetting ? null : _confirmFactoryReset,
               icon: _isResetting ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator()) : const Icon(Icons.warning_amber_rounded),
               label: const Text("FACTORY RESET PANEL", style: TextStyle(fontWeight: FontWeight.bold)),
             ),
             const SizedBox(height: 32),
           ],
         ),
-      ),
     );
   }
 }

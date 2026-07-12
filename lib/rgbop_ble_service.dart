@@ -122,6 +122,9 @@ debugPrint("[BLE] Waiting for iOS Bluetooth manager to wake up...");
       debugPrint("[BLE] Transmitting connection trigger command byte...");
       await cmdChar.write([0x01], withoutResponse: false);
       
+      debugPrint("[BLE] Waiting 12 seconds for ESP32 hardware reboot...");
+      await Future.delayed(const Duration(seconds: 12));
+      
       return true;
     } catch (e) {
       debugPrint("[BLE] Critical error during credential payload transmission: $e");

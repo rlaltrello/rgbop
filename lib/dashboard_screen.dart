@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'rgbop_mdns_service.dart';
 import 'gif_manager_screen.dart';
 import 'package:geolocator/geolocator.dart';
+import 'doodle_gallery.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -509,6 +510,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 32),
+ElevatedButton.icon(
+  icon: const Icon(Icons.brush),
+  label: const Text('Doodle Gallery'), // Updated label
+  onPressed: () {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const DoodleGallery(), // Updated destination
+      ),
+    );
+  },
+),
             const SizedBox(height: 32),
 
             // --- DANGER ZONE ---

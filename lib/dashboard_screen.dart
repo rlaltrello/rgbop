@@ -28,6 +28,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _showISS = true;
   bool _showPlanes = true;
   bool _showTextBlast = true;
+  bool _showDoodles = true;
   double _brightness = 128;
   bool _nightMode = false;
   int _nightStart = 22;
@@ -130,6 +131,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _showISS = data['iss'] ?? true;
           _showPlanes = data['planes'] ?? true;
           _showTextBlast = data['textblast'] ?? true;
+          _showDoodles = data['doodles'] ?? true;
           _brightness = (data['brightness'] ?? 128).toDouble();
           _nightMode = data['nightMode'] ?? false;
           _nightStart = data['nightStart'] ?? 22;
@@ -161,6 +163,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "iss": _showISS,
         "planes": _showPlanes,
         "textblast": _showTextBlast,
+        "doodles": _showDoodles,
         "lat": double.tryParse(_latCtrl.text) ?? 34.16,
         "lng": double.tryParse(_lngCtrl.text) ?? -84.80,
         "osUser": _osUserCtrl.text,
@@ -314,6 +317,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   SwitchListTile(title: const Text("ISS Tracker"), value: _showISS, onChanged: (v) => setState(() => _showISS = v)),
                   SwitchListTile(title: const Text("Planes"), value: _showPlanes, onChanged: (v) => setState(() => _showPlanes = v)),
                   SwitchListTile(title: const Text("Text Blast"), value: _showTextBlast, onChanged: (v) => setState(() => _showTextBlast = v)),
+                  SwitchListTile(title: const Text("Doodles"), value: _showDoodles, onChanged: (v) => setState(() => _showDoodles = v)),
+ 
                   const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 16.0),
                   child: Divider(color: Colors.white24),
@@ -442,6 +447,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ),
             const SizedBox(height: 16),
+
+            // --- DOODLE MANAGEMENT ---
+            Card(
+              color: const Color(0xFF1E1E1E),
+              child: ListTile(
+                leading: const Icon(Icons.brush, color: Colors.blueAccent),
+                title: const Text("Manage Doodles", style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text("Let your creativity shine!"),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () {
+                  FocusScope.of(context).unfocus();
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const DoodleGallery(),
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
             
             // --- LOCATION ---
             Card(
@@ -510,19 +536,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
               ),
             ),
-            const SizedBox(height: 32),
-ElevatedButton.icon(
-  icon: const Icon(Icons.brush),
-  label: const Text('Doodle Gallery'), // Updated label
-  onPressed: () {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => const DoodleGallery(), // Updated destination
-      ),
-    );
-  },
-),
             const SizedBox(height: 32),
 
             // --- DANGER ZONE ---

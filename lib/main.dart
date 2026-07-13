@@ -77,7 +77,7 @@ class _BootRouterState extends State<BootRouter> {
       });
       
       // Pause just long enough for the user to read it
-      await Future.delayed(const Duration(milliseconds: 800));
+      await Future.delayed(const Duration(milliseconds: 300));
       
       if (mounted) {
         // Bypass BLE and go straight to the dashboard.

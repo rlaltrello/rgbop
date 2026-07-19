@@ -3,7 +3,6 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'dart:typed_data';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import 'package:http/http.dart' as http;
 
 class DoodleEditor extends StatefulWidget {
   final int gridSize = 64;
@@ -19,16 +18,16 @@ class DoodleEditor extends StatefulWidget {
 class _DoodleEditorState extends State<DoodleEditor> {
   late List<Color> _pixels;
   Color _selectedColor = Colors.red;
-  
+
   // Mutable state variable to track the active file instead of using widget.existingFile
   File? _currentFile;
-  
+
   bool _isZoomMode = false;
-  bool _isFillMode = false; 
+  bool _isFillMode = false;
   bool _isDraggingBox = false;
   int _brushSize = 1; // Tracks brush thickness (1px, 2px, 3px)
   bool _isEyedropperMode = false;
-  Offset _zoomOffset = const Offset(27.0, 27.0); 
+  Offset _zoomOffset = const Offset(27.0, 27.0);
   final List<List<Color>> _undoHistory = [];
   final int _maxHistory = 50; // Prevent infinite memory growth
 
@@ -37,13 +36,15 @@ class _DoodleEditorState extends State<DoodleEditor> {
     super.initState();
     // Initialize our mutable state variable with the passed file from the parent widget
     _currentFile = widget.existingFile;
-    
-    _pixels = widget.initialPixels != null && widget.initialPixels!.length == widget.gridSize * widget.gridSize
+
+    _pixels =
+        widget.initialPixels != null &&
+            widget.initialPixels!.length == widget.gridSize * widget.gridSize
         ? List.from(widget.initialPixels!)
         : List.filled(widget.gridSize * widget.gridSize, Colors.black);
   }
 
-  // --- Conversions & Sync ---
+  // --- Conversions ---
   Uint8List _convertToRGB565() {
     final bytes = Uint8List(_pixels.length * 2);
     for (int i = 0; i < _pixels.length; i++) {
@@ -62,47 +63,26 @@ class _DoodleEditorState extends State<DoodleEditor> {
       if (_currentFile == null) {
         final directory = await getApplicationDocumentsDirectory();
         // Create and assign the new file object safely inside state
-        _currentFile = File('${directory.path}/doodle_${DateTime.now().millisecondsSinceEpoch}.bin');
+        _currentFile = File(
+          '${directory.path}/doodle_${DateTime.now().millisecondsSinceEpoch}.bin',
+        );
       }
-      
+
       await _currentFile!.writeAsBytes(_convertToRGB565());
-      
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Saved locally: ${_currentFile!.path.split('/').last}'))
+          SnackBar(
+            content: Text(
+              'Saved locally: ${_currentFile!.path.split('/').last}',
+            ),
+          ),
         );
       }
       // Rebuild UI so we now reference the new local file
-      setState(() {}); 
+      setState(() {});
     } catch (e) {
       debugPrint('Error saving doodle locally: $e');
-    }
-  }
-
-  Future<void> _syncToESP32() async {
-    // 1. If it's not saved locally yet, save it first so we establish a consistent filename
-    if (_currentFile == null) {
-      await _saveDoodleLocally();
-    }
-
-    final String esp32Url = 'http://rgbop.local/api/doodle/upload';
-    try {
-      final bytes = _convertToRGB565();
-      var request = http.MultipartRequest('POST', Uri.parse(esp32Url));
-      
-      // Ensure we consistently use the exact same filename
-      String fileName = _currentFile!.path.split('/').last;
-      request.files.add(http.MultipartFile.fromBytes('file', bytes, filename: fileName));
-      
-      final response = await http.Response.fromStream(await request.send());
-      
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(response.statusCode == 200 ? 'Synced: $fileName' : 'Failed: ${response.statusCode}'))
-        );
-      }
-    } catch (e) {
-      debugPrint('Network error: $e');
     }
   }
 
@@ -118,17 +98,17 @@ class _DoodleEditorState extends State<DoodleEditor> {
 
     while (stack.isNotEmpty) {
       int current = stack.removeLast();
-      
+
       if (_pixels[current].toARGB32() == targetColor.toARGB32()) {
         _pixels[current] = replacementColor;
 
         int cx = current % widget.gridSize;
         int cy = current ~/ widget.gridSize;
 
-        if (cx > 0) stack.add(current - 1); 
-        if (cx < widget.gridSize - 1) stack.add(current + 1); 
-        if (cy > 0) stack.add(current - widget.gridSize); 
-        if (cy < widget.gridSize - 1) stack.add(current + widget.gridSize); 
+        if (cx > 0) stack.add(current - 1);
+        if (cx < widget.gridSize - 1) stack.add(current + 1);
+        if (cy > 0) stack.add(current - widget.gridSize);
+        if (cy < widget.gridSize - 1) stack.add(current + widget.gridSize);
       }
     }
     setState(() {});
@@ -143,8 +123,11 @@ class _DoodleEditorState extends State<DoodleEditor> {
       for (int j = 0; j < _brushSize; j++) {
         int px = cx + i - offset;
         int py = cy + j - offset;
-        
-        if (px >= 0 && px < widget.gridSize && py >= 0 && py < widget.gridSize) {
+
+        if (px >= 0 &&
+            px < widget.gridSize &&
+            py >= 0 &&
+            py < widget.gridSize) {
           int index = py * widget.gridSize + px;
           if (_pixels[index].toARGB32() != _selectedColor.toARGB32()) {
             _pixels[index] = _selectedColor;
@@ -157,11 +140,11 @@ class _DoodleEditorState extends State<DoodleEditor> {
   }
 
   void _saveToHistory() {
-    _undoHistory.add(List.from(_pixels)); 
+    _undoHistory.add(List.from(_pixels));
     if (_undoHistory.length > _maxHistory) {
-      _undoHistory.removeAt(0); 
+      _undoHistory.removeAt(0);
     }
-    setState(() {}); 
+    setState(() {});
   }
 
   void _undo() {
@@ -173,14 +156,19 @@ class _DoodleEditorState extends State<DoodleEditor> {
   }
 
   // --- Main Canvas Drawing ---
-  void _handleMainDrawing(Offset localPosition, Size canvasSize, {bool isTap = false}) {
+  void _handleMainDrawing(
+    Offset localPosition,
+    Size canvasSize, {
+    bool isTap = false,
+  }) {
     final double cell = canvasSize.width / widget.gridSize;
     int x = (localPosition.dx / cell).floor();
     int y = (localPosition.dy / cell).floor();
-    
+
     if (x >= 0 && x < widget.gridSize && y >= 0 && y < widget.gridSize) {
       if (_isEyedropperMode) {
-        if (_pixels[y * widget.gridSize + x].toARGB32() != _selectedColor.toARGB32()) {
+        if (_pixels[y * widget.gridSize + x].toARGB32() !=
+            _selectedColor.toARGB32()) {
           setState(() => _selectedColor = _pixels[y * widget.gridSize + x]);
         }
         return;
@@ -195,7 +183,11 @@ class _DoodleEditorState extends State<DoodleEditor> {
   }
 
   // --- Zoom Window Drawing ---
-  void _handleZoomDrawing(Offset localPosition, double zoomWindowSize, {bool isTap = false}) {
+  void _handleZoomDrawing(
+    Offset localPosition,
+    double zoomWindowSize, {
+    bool isTap = false,
+  }) {
     final double cell = zoomWindowSize / 10;
     int localX = (localPosition.dx / cell).floor();
     int localY = (localPosition.dy / cell).floor();
@@ -203,8 +195,11 @@ class _DoodleEditorState extends State<DoodleEditor> {
     if (localX >= 0 && localX < 10 && localY >= 0 && localY < 10) {
       int mainX = _zoomOffset.dx.toInt() + localX;
       int mainY = _zoomOffset.dy.toInt() + localY;
-      
-      if (mainX >= 0 && mainX < widget.gridSize && mainY >= 0 && mainY < widget.gridSize) {
+
+      if (mainX >= 0 &&
+          mainX < widget.gridSize &&
+          mainY >= 0 &&
+          mainY < widget.gridSize) {
         if (_isEyedropperMode) {
           int index = mainY * widget.gridSize + mainX;
           if (_pixels[index].toARGB32() != _selectedColor.toARGB32()) {
@@ -239,8 +234,19 @@ class _DoodleEditorState extends State<DoodleEditor> {
       context: context,
       builder: (BuildContext context) => AlertDialog(
         title: const Text('Pick a color'),
-        content: SingleChildScrollView(child: ColorPicker(pickerColor: _selectedColor, onColorChanged: (c) => setState(() => _selectedColor = c), enableAlpha: false)),
-        actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Done'))],
+        content: SingleChildScrollView(
+          child: ColorPicker(
+            pickerColor: _selectedColor,
+            onColorChanged: (c) => setState(() => _selectedColor = c),
+            enableAlpha: false,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Done'),
+          ),
+        ],
       ),
     );
   }
@@ -252,15 +258,20 @@ class _DoodleEditorState extends State<DoodleEditor> {
 
     return Scaffold(
       backgroundColor: Colors.grey[900],
-      appBar: AppBar(title: const Text('Doodle Editor'), actions: [
-        IconButton(
-          icon: const Icon(Icons.undo), 
-          tooltip: 'Undo',
-          onPressed: _undoHistory.isNotEmpty ? _undo : null, 
-        ),
-        IconButton(icon: const Icon(Icons.save), onPressed: _saveDoodleLocally),
-        IconButton(icon: const Icon(Icons.sync), onPressed: _syncToESP32),
-      ]),
+      appBar: AppBar(
+        title: const Text('Doodle Editor'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.undo),
+            tooltip: 'Undo',
+            onPressed: _undoHistory.isNotEmpty ? _undo : null,
+          ),
+          IconButton(
+            icon: const Icon(Icons.save),
+            onPressed: _saveDoodleLocally,
+          ),
+        ],
+      ),
       body: SafeArea(
         child: SingleChildScrollView(
           child: Padding(
@@ -271,21 +282,40 @@ class _DoodleEditorState extends State<DoodleEditor> {
                 if (_isZoomMode)
                   GestureDetector(
                     onPanStart: (d) {
-                      if (!_isEyedropperMode) _saveToHistory(); 
-                      _handleZoomDrawing(d.localPosition, zoomWindowSize, isTap: true);
+                      if (!_isEyedropperMode) _saveToHistory();
+                      _handleZoomDrawing(
+                        d.localPosition,
+                        zoomWindowSize,
+                        isTap: true,
+                      );
                     },
-                    onPanUpdate: (d) => _handleZoomDrawing(d.localPosition, zoomWindowSize, isTap: false),
+                    onPanUpdate: (d) => _handleZoomDrawing(
+                      d.localPosition,
+                      zoomWindowSize,
+                      isTap: false,
+                    ),
                     onPanEnd: (_) {
-                      if (_isEyedropperMode) setState(() => _isEyedropperMode = false); 
+                      if (_isEyedropperMode) {
+                        setState(() => _isEyedropperMode = false);
+                      }
                     },
                     child: Container(
-                      width: zoomWindowSize, height: zoomWindowSize, 
+                      width: zoomWindowSize,
+                      height: zoomWindowSize,
                       decoration: BoxDecoration(
-                        color: Colors.black, 
+                        color: Colors.black,
                         border: Border.all(color: Colors.white70, width: 3),
-                        boxShadow: const [BoxShadow(color: Colors.black54, blurRadius: 10, spreadRadius: 5)],
+                        boxShadow: const [
+                          BoxShadow(
+                            color: Colors.black54,
+                            blurRadius: 10,
+                            spreadRadius: 5,
+                          ),
+                        ],
                       ),
-                      child: CustomPaint(painter: ZoomedPainter(_pixels, _zoomOffset)),
+                      child: CustomPaint(
+                        painter: ZoomedPainter(_pixels, _zoomOffset),
+                      ),
                     ),
                   )
                 else
@@ -299,7 +329,11 @@ class _DoodleEditorState extends State<DoodleEditor> {
                       _isDraggingBox = true;
                     } else {
                       if (!_isEyedropperMode) _saveToHistory();
-                      _handleMainDrawing(details.localPosition, canvasSize, isTap: true);
+                      _handleMainDrawing(
+                        details.localPosition,
+                        canvasSize,
+                        isTap: true,
+                      );
                     }
                   },
                   onPanUpdate: (details) {
@@ -308,79 +342,141 @@ class _DoodleEditorState extends State<DoodleEditor> {
                         _updateZoomBoxPosition(details.delta, canvasSize);
                       }
                     } else {
-                      _handleMainDrawing(details.localPosition, canvasSize, isTap: false);
+                      _handleMainDrawing(
+                        details.localPosition,
+                        canvasSize,
+                        isTap: false,
+                      );
                     }
                   },
                   onPanEnd: (_) {
                     _isDraggingBox = false;
-                    if (_isEyedropperMode) setState(() => _isEyedropperMode = false);
+                    if (_isEyedropperMode) {
+                      setState(() => _isEyedropperMode = false);
+                    }
                   },
                   child: Container(
-                    width: canvasSize.width, height: canvasSize.height,
-                    decoration: BoxDecoration(border: Border.all(color: Colors.white24, width: 2), color: Colors.black),
-                    child: CustomPaint(painter: PixelGridPainter(_pixels, widget.gridSize, _isZoomMode, _zoomOffset)),
+                    width: canvasSize.width,
+                    height: canvasSize.height,
+                    decoration: BoxDecoration(
+                      border: Border.all(color: Colors.white24, width: 2),
+                      color: Colors.black,
+                    ),
+                    child: CustomPaint(
+                      painter: PixelGridPainter(
+                        _pixels,
+                        widget.gridSize,
+                        _isZoomMode,
+                        _zoomOffset,
+                      ),
+                    ),
                   ),
                 ),
 
                 const SizedBox(height: 32),
 
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
                   margin: const EdgeInsets.symmetric(horizontal: 16),
-                  decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(16)),
-                  child: Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
-                    GestureDetector(onTap: _openColorPicker, child: CircleAvatar(backgroundColor: _selectedColor, radius: 18)),
-                    
-                    IconButton(
-                      icon: Icon(Icons.format_color_fill, color: _isFillMode ? Colors.blue : Colors.white), 
-                      onPressed: () => setState(() => _isFillMode = !_isFillMode),
-                      tooltip: 'Flood Fill',
-                    ),
-
-                    GestureDetector(
-                      onTap: () => setState(() => _brushSize = _brushSize >= 3 ? 1 : _brushSize + 1),
-                      child: Container(
-                        width: 32, height: 32,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: Colors.white70, width: 2),
-                          shape: BoxShape.circle,
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    children: [
+                      GestureDetector(
+                        onTap: _openColorPicker,
+                        child: CircleAvatar(
+                          backgroundColor: _selectedColor,
+                          radius: 18,
                         ),
-                        child: Text('${_brushSize}x', style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12)),
                       ),
-                    ),
 
-                    IconButton(
-                      icon: Icon(_isZoomMode ? Icons.zoom_out : Icons.zoom_in, color: _isZoomMode ? Colors.blue : Colors.white), 
-                      onPressed: () => setState(() {
-                        _isZoomMode = !_isZoomMode;
-                        _isDraggingBox = false; 
-                      }),
-                      tooltip: 'Zoom Window',
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.colorize, color: _isEyedropperMode ? Colors.blue : Colors.white), 
-                      onPressed: () => setState(() {
-                        _isEyedropperMode = !_isEyedropperMode;
-                        if (_isEyedropperMode) _isFillMode = false;
-                      }),
-                      tooltip: 'Eyedropper',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.cleaning_services, color: Colors.white70), 
-                      onPressed: () => setState(() => _selectedColor = Colors.black),
-                      tooltip: 'Eraser',
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_forever, color: Colors.redAccent), 
-                      onPressed: () {
-                        _saveToHistory();
-                        setState(() => _pixels = List.filled(4096, Colors.black));
-                      },
-                      tooltip: 'Clear All',
-                    ),
-                  ]),
-                )
+                      IconButton(
+                        icon: Icon(
+                          Icons.format_color_fill,
+                          color: _isFillMode ? Colors.blue : Colors.white,
+                        ),
+                        onPressed: () =>
+                            setState(() => _isFillMode = !_isFillMode),
+                        tooltip: 'Flood Fill',
+                      ),
+
+                      GestureDetector(
+                        onTap: () => setState(
+                          () =>
+                              _brushSize = _brushSize >= 3 ? 1 : _brushSize + 1,
+                        ),
+                        child: Container(
+                          width: 32,
+                          height: 32,
+                          alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            border: Border.all(color: Colors.white70, width: 2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Text(
+                            '${_brushSize}x',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      IconButton(
+                        icon: Icon(
+                          _isZoomMode ? Icons.zoom_out : Icons.zoom_in,
+                          color: _isZoomMode ? Colors.blue : Colors.white,
+                        ),
+                        onPressed: () => setState(() {
+                          _isZoomMode = !_isZoomMode;
+                          _isDraggingBox = false;
+                        }),
+                        tooltip: 'Zoom Window',
+                      ),
+                      IconButton(
+                        icon: Icon(
+                          Icons.colorize,
+                          color: _isEyedropperMode ? Colors.blue : Colors.white,
+                        ),
+                        onPressed: () => setState(() {
+                          _isEyedropperMode = !_isEyedropperMode;
+                          if (_isEyedropperMode) _isFillMode = false;
+                        }),
+                        tooltip: 'Eyedropper',
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.cleaning_services,
+                          color: Colors.white70,
+                        ),
+                        onPressed: () =>
+                            setState(() => _selectedColor = Colors.black),
+                        tooltip: 'Eraser',
+                      ),
+                      IconButton(
+                        icon: const Icon(
+                          Icons.delete_forever,
+                          color: Colors.redAccent,
+                        ),
+                        onPressed: () {
+                          _saveToHistory();
+                          setState(
+                            () => _pixels = List.filled(4096, Colors.black),
+                          );
+                        },
+                        tooltip: 'Clear All',
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
@@ -397,7 +493,12 @@ class PixelGridPainter extends CustomPainter {
   final bool isZoomMode;
   final Offset zoomOffset;
 
-  PixelGridPainter(this.pixels, this.gridSize, this.isZoomMode, this.zoomOffset);
+  PixelGridPainter(
+    this.pixels,
+    this.gridSize,
+    this.isZoomMode,
+    this.zoomOffset,
+  );
 
   @override
   void paint(Canvas canvas, Size size) {
@@ -406,19 +507,25 @@ class PixelGridPainter extends CustomPainter {
     Paint pix = Paint()..style = PaintingStyle.fill;
 
     for (int i = 0; i < pixels.length; i++) {
-      int x = i % gridSize; int y = i ~/ gridSize;
+      int x = i % gridSize;
+      int y = i ~/ gridSize;
       canvas.drawRect(Rect.fromLTWH(x * s, y * s, s, s), bg);
       if (pixels[i].toARGB32() != Colors.black.toARGB32()) {
         pix.color = pixels[i];
-        canvas.drawCircle(Offset(x * s + s/2, y * s + s/2), s * 0.35, pix);
+        canvas.drawCircle(Offset(x * s + s / 2, y * s + s / 2), s * 0.35, pix);
       }
     }
-    
+
     if (isZoomMode) {
       int zx = zoomOffset.dx.toInt();
       int zy = zoomOffset.dy.toInt(); // <--- CORRECTED: Changed 'zy' to 'dy'
-      canvas.drawRect(Rect.fromLTWH(zx * s, zy * s, 10 * s, 10 * s), 
-        Paint()..color = Colors.blue..style = PaintingStyle.stroke..strokeWidth = 3);
+      canvas.drawRect(
+        Rect.fromLTWH(zx * s, zy * s, 10 * s, 10 * s),
+        Paint()
+          ..color = Colors.blue
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3,
+      );
     }
   }
 
@@ -442,14 +549,18 @@ class ZoomedPainter extends CustomPainter {
       for (int x = 0; x < 10; x++) {
         int mainX = zoomOffset.dx.toInt() + x;
         int mainY = zoomOffset.dy.toInt() + y;
-        
+
         canvas.drawRect(Rect.fromLTWH(x * s, y * s, s, s), bg);
-        
+
         if (mainX < 64 && mainY < 64) {
           Color c = pixels[mainY * 64 + mainX];
           if (c.toARGB32() != Colors.black.toARGB32()) {
             pix.color = c;
-            canvas.drawCircle(Offset(x * s + s/2, y * s + s/2), s * 0.4, pix);
+            canvas.drawCircle(
+              Offset(x * s + s / 2, y * s + s / 2),
+              s * 0.4,
+              pix,
+            );
           }
         }
       }

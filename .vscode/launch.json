@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Dart & Flutter (iPhone USB)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "debug",
+      "deviceId": "00008130-001C6DE92461401C"
+    },
+    {
+      "name": "Dart & Flutter (iPhone wireless)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "flutterMode": "debug",
+      "deviceId": "00008130-001C6DE92461401C",
+      "toolArgs": [
+        "--device-timeout",
+        "30"
+      ]
+    }
+  ]
+}

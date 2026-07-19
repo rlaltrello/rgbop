@@ -11,7 +11,9 @@ class RGBopMdnsService {
 
     // STRATEGY 1: Native OS Resolution
     try {
-      final List<InternetAddress> addresses = await InternetAddress.lookup('rgbop.local');
+      final List<InternetAddress> addresses = await InternetAddress
+          .lookup('rgbop.local')
+          .timeout(const Duration(seconds: 4));
       if (addresses.isNotEmpty) {
         targetIp = addresses.first.address;
         debugPrint("[mDNS] Native lookup found IP: $targetIp");
@@ -32,9 +34,13 @@ class RGBopMdnsService {
 
       try {
         await client.start();
-        await for (final IPAddressResourceRecord record in client.lookup<IPAddressResourceRecord>(
-          ResourceRecordQuery.addressIPv4('rgbop.local')
-        )) {
+        final results = client
+            .lookup<IPAddressResourceRecord>(
+              ResourceRecordQuery.addressIPv4('rgbop.local'),
+            )
+            .timeout(const Duration(seconds: 4));
+
+        await for (final IPAddressResourceRecord record in results) {
           targetIp = record.address.address;
           debugPrint("[mDNS] Found via UDP: $targetIp");
           client.stop();

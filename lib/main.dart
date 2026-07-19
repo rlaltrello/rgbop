@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'setup_screen.dart'; 
+import 'setup_screen.dart';
 import 'dashboard_screen.dart';
 import 'rgbop_mdns_service.dart'; // Add your mDNS service here
 
@@ -14,8 +14,8 @@ class RGBopApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'RGBop',
-      debugShowCheckedModeBanner: false, 
-      
+      debugShowCheckedModeBanner: false,
+
       theme: ThemeData(
         brightness: Brightness.dark,
         scaffoldBackgroundColor: const Color(0xFF121212),
@@ -27,12 +27,13 @@ class RGBopApp extends StatelessWidget {
         ),
         useMaterial3: true,
       ),
-      
+
       // Point the initial route to our new BootRouter instead of Setup
       initialRoute: '/',
       routes: {
         '/': (context) => const BootRouter(),
-        '/setup': (context) => SetupScreen(), // Setup is now explicitly '/setup'
+        '/setup': (context) =>
+            SetupScreen(), // Setup is now explicitly '/setup'
         '/dashboard': (context) => const DashboardScreen(),
       },
     );
@@ -66,7 +67,12 @@ class _BootRouterState extends State<BootRouter> {
 
     // 1. Look for the panel on the local network
     final mdns = RGBopMdnsService();
-    String? ip = await mdns.findPanelIp();
+    String? ip;
+    try {
+      ip = await mdns.findPanelIp().timeout(const Duration(seconds: 8));
+    } catch (_) {
+      ip = null;
+    }
 
     if (!mounted) return;
 
@@ -75,13 +81,13 @@ class _BootRouterState extends State<BootRouter> {
       setState(() {
         _statusText = "Found panel! Enumerating services...";
       });
-      
+
       // Pause just long enough for the user to read it
       await Future.delayed(const Duration(milliseconds: 300));
-      
+
       if (mounted) {
         // Bypass BLE and go straight to the dashboard.
-        Navigator.pushReplacementNamed(context, '/dashboard');
+        Navigator.pushReplacementNamed(context, '/dashboard', arguments: ip);
       }
     } else {
       // Not found. Stop searching and show the retry buttons.
@@ -126,7 +132,11 @@ class _BootRouterState extends State<BootRouter> {
         const SizedBox(height: 16),
         const Text(
           "Could not find RGBop on the network.",
-          style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 8),
@@ -136,7 +146,7 @@ class _BootRouterState extends State<BootRouter> {
           textAlign: TextAlign.center,
         ),
         const SizedBox(height: 32),
-        
+
         // Button 1: Retry WiFi
         SizedBox(
           width: double.infinity,
@@ -146,12 +156,15 @@ class _BootRouterState extends State<BootRouter> {
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
             icon: const Icon(Icons.refresh, color: Colors.white),
-            label: const Text("Retry Existing Panel", style: TextStyle(color: Colors.white, fontSize: 16)),
+            label: const Text(
+              "Retry Existing Panel",
+              style: TextStyle(color: Colors.white, fontSize: 16),
+            ),
             onPressed: _attemptConnection,
           ),
         ),
         const SizedBox(height: 16),
-        
+
         // Button 2: Fallback to Bluetooth Setup
         SizedBox(
           width: double.infinity,
@@ -161,7 +174,10 @@ class _BootRouterState extends State<BootRouter> {
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
             icon: const Icon(Icons.bluetooth, color: Colors.blueAccent),
-            label: const Text("Set Up New Panel", style: TextStyle(color: Colors.blueAccent, fontSize: 16)),
+            label: const Text(
+              "Set Up New Panel",
+              style: TextStyle(color: Colors.blueAccent, fontSize: 16),
+            ),
             onPressed: () {
               // Navigate to the Setup route manually
               Navigator.pushReplacementNamed(context, '/setup');

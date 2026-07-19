@@ -79,5 +79,11 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>This app requires location access to set the dashboard coordinates for weather and plane tracking.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>RGBop uses the camera so you can capture photos and convert them into doodles.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>RGBop needs photo library access to import images as doodles.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>RGBop may save imported photo edits for doodle creation.</string>
 </dict>
 </plist>

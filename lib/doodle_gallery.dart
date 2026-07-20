@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
@@ -6,6 +7,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import 'doodle_editor.dart';
+import 'panel_storage_info.dart';
 import 'rgbop_mdns_service.dart';
 
 class DoodleItem {
@@ -35,17 +37,27 @@ class DoodleGallery extends StatefulWidget {
 
 class _DoodleGalleryState extends State<DoodleGallery> {
   final RGBopMdnsService _mdnsService = RGBopMdnsService();
+  static const double _snackBarLaneHeight = 76;
 
   List<DoodleItem> _doodles = [];
   bool _isLoading = true;
   bool _isSyncing = false;
   double _syncProgress = 0;
   String _syncStatus = '';
+  PanelStorageInfo? _storageInfo;
+  String? _messageText;
+  Timer? _messageTimer;
 
   @override
   void initState() {
     super.initState();
     _loadAllDoodles();
+  }
+
+  @override
+  void dispose() {
+    _messageTimer?.cancel();
+    super.dispose();
   }
 
   Future<String> _resolvePanelBaseUrl() async {
@@ -63,7 +75,9 @@ class _DoodleGalleryState extends State<DoodleGallery> {
       // Keep fallback discovery silent to preserve local-first workflows.
     }
 
-    throw Exception('No panel target available. Pick a panel from the main screen first.');
+    throw Exception(
+      'No panel target available. Pick a panel from the main screen first.',
+    );
   }
 
   Future<List<String>> _fetchRemoteDoodleNames(String baseUrl) async {
@@ -114,6 +128,7 @@ class _DoodleGalleryState extends State<DoodleGallery> {
 
     final baseUrl = await _resolvePanelBaseUrl();
     final remoteNames = await _fetchRemoteDoodleNames(baseUrl);
+    final storageInfo = await _fetchStorageInfo(baseUrl);
 
     for (final remoteName in remoteNames) {
       if (map.containsKey(remoteName)) {
@@ -161,8 +176,24 @@ class _DoodleGalleryState extends State<DoodleGallery> {
     if (!mounted) return;
     setState(() {
       _doodles = doodles;
+      _storageInfo = storageInfo;
       _isLoading = false;
     });
+  }
+
+  Future<PanelStorageInfo?> _fetchStorageInfo(String baseUrl) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/fs/info'))
+          .timeout(const Duration(seconds: 4));
+      if (response.statusCode != 200) return null;
+
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map) return null;
+      return PanelStorageInfo.fromJson(decoded);
+    } catch (_) {
+      return null;
+    }
   }
 
   List<Color> _parseRGB565(List<int> bytes) {
@@ -182,9 +213,58 @@ class _DoodleGalleryState extends State<DoodleGallery> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(SnackBar(content: Text(message)));
+    _messageTimer?.cancel();
+    setState(() {
+      _messageText = message;
+    });
+    _messageTimer = Timer(const Duration(seconds: 4), () {
+      if (!mounted) return;
+      setState(() {
+        _messageText = null;
+      });
+    });
+  }
+
+  Widget _buildMessageLane() {
+    final bottomInset = MediaQuery.of(context).padding.bottom;
+
+    return SafeArea(
+      top: false,
+      child: SizedBox(
+        height: _snackBarLaneHeight,
+        child: Padding(
+          padding: EdgeInsets.fromLTRB(16, 8, 16, bottomInset > 0 ? 8 : 12),
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 180),
+            child: _messageText == null
+                ? const SizedBox.expand(key: ValueKey('empty-message'))
+                : Material(
+                    key: const ValueKey('active-message'),
+                    color: const Color(0xFFE3DCE6),
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 18,
+                        vertical: 16,
+                      ),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          _messageText!,
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Color(0xFF3F3845),
+                            fontSize: 16,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _confirmDeleteLocalDoodle(DoodleItem doodle) async {
@@ -225,6 +305,7 @@ class _DoodleGalleryState extends State<DoodleGallery> {
         await doodle.localFile!.delete();
       }
       await _loadAllDoodles();
+      _showSnack('Deleted ${doodle.filename} from local storage.');
     } catch (e) {
       _showSnack('Failed to delete local doodle: $e');
     }
@@ -399,6 +480,40 @@ class _DoodleGalleryState extends State<DoodleGallery> {
     await _loadAllDoodles();
   }
 
+  Future<void> _createDoodle() async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(builder: (_) => const DoodleEditor()),
+    );
+    await _loadAllDoodles();
+  }
+
+  Widget _buildAddTile() {
+    return GestureDetector(
+      onTap: _createDoodle,
+      child: Container(
+        decoration: BoxDecoration(
+          border: Border.all(color: Colors.blueAccent),
+          color: const Color(0xFF151515),
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: const [
+            Icon(Icons.add_box_outlined, color: Colors.blueAccent, size: 42),
+            SizedBox(height: 10),
+            Text(
+              'Add Doodle',
+              style: TextStyle(
+                color: Colors.blueAccent,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -415,18 +530,10 @@ class _DoodleGalleryState extends State<DoodleGallery> {
             onPressed: _isSyncing ? null : _syncLocalToPanel,
             tooltip: 'Sync local doodles to panel',
           ),
-          IconButton(
-            icon: const Icon(Icons.add),
-            onPressed: () async {
-              await Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const DoodleEditor()),
-              );
-              await _loadAllDoodles();
-            },
-          ),
+          IconButton(icon: const Icon(Icons.add), onPressed: _createDoodle),
         ],
       ),
+      bottomNavigationBar: _buildMessageLane(),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
@@ -448,6 +555,11 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                       ],
                     ),
                   ),
+                if (_storageInfo != null)
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+                    child: PanelStorageSection(info: _storageInfo!),
+                  ),
                 Expanded(
                   child: _doodles.isEmpty
                       ? const Center(
@@ -457,15 +569,19 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                           ),
                         )
                       : GridView.builder(
-                          padding: const EdgeInsets.all(16),
+                          padding: EdgeInsets.fromLTRB(16, 16, 16, 16),
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
                                 crossAxisCount: 3,
                                 crossAxisSpacing: 8,
                                 mainAxisSpacing: 8,
                               ),
-                          itemCount: _doodles.length,
+                          itemCount: _doodles.length + 1,
                           itemBuilder: (context, index) {
+                            if (index == _doodles.length) {
+                              return _buildAddTile();
+                            }
+
                             final doodle = _doodles[index];
                             final borderColor = doodle.isLocal
                                 ? (doodle.isRemote

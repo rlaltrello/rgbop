@@ -32,10 +32,11 @@
 	<string>RGBop uses Bluetooth to connect to your local matrix displays.</string>
 	<key>NSBonjourServices</key>
 	<array>
+		<string>_services._dns-sd._udp</string>
 		<string>_http._tcp</string>
 	</array>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>RGBop needs to find your panel on the local Wi-Fi network.</string>
+	<string>We need access to the local network to discover mDNS services.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

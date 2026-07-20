@@ -657,10 +657,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
               trailing: const Icon(Icons.chevron_right),
               onTap: () {
                 FocusScope.of(context).unfocus();
+                if (_panelIp == null || _panelIp!.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('No panel selected. Return to picker and reconnect.'),
+                    ),
+                  );
+                  return;
+                }
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => const DoodleGallery(),
+                    builder: (context) => DoodleGallery(panelIp: _panelIp),
                   ),
                 );
               },

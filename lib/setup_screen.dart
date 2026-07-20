@@ -43,6 +43,45 @@ class SetupScreen extends StatelessWidget {
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 18, color: Colors.white70),
                   ),
+                  if (!provider.isConnected && provider.candidateDeviceIds.isNotEmpty) ...[
+                    const SizedBox(height: 20),
+                    const Text(
+                      "Select Provisioning Device",
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 16,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ...provider.candidateDeviceIds.map(
+                      (id) => Card(
+                        color: Colors.white10,
+                        child: ListTile(
+                          leading: const Icon(Icons.memory, color: Colors.blueAccent),
+                          title: const Text(
+                            "RGBop-Setup",
+                            style: TextStyle(color: Colors.white),
+                          ),
+                          subtitle: Text(
+                            id,
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                          trailing: const Icon(Icons.login, color: Colors.blueAccent),
+                          onTap: provider.isScanning
+                              ? null
+                              : () => provider.connectToCandidate(id),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    OutlinedButton.icon(
+                      onPressed: provider.isScanning ? null : provider.retryScan,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text("Rescan"),
+                    ),
+                  ],
                   const SizedBox(height: 40),
                   
                   // --- The Wi-Fi Form (Only shows when connected via BLE) ---

@@ -25,7 +25,9 @@ class DoodleItem {
 }
 
 class DoodleGallery extends StatefulWidget {
-  const DoodleGallery({super.key});
+  final String? panelIp;
+
+  const DoodleGallery({super.key, this.panelIp});
 
   @override
   State<DoodleGallery> createState() => _DoodleGalleryState();
@@ -47,15 +49,21 @@ class _DoodleGalleryState extends State<DoodleGallery> {
   }
 
   Future<String> _resolvePanelBaseUrl() async {
+    final routeIp = widget.panelIp?.trim();
+    if (routeIp != null && routeIp.isNotEmpty) {
+      return 'http://$routeIp';
+    }
+
     try {
       final ip = await _mdnsService.findPanelIp().timeout(
         const Duration(seconds: 8),
       );
       if (ip != null) return 'http://$ip';
     } catch (_) {
-      // Fall back to hostname for networks where mDNS name resolution still works.
+      // Keep fallback discovery silent to preserve local-first workflows.
     }
-    return 'http://rgbop.local';
+
+    throw Exception('No panel target available. Pick a panel from the main screen first.');
   }
 
   Future<List<String>> _fetchRemoteDoodleNames(String baseUrl) async {

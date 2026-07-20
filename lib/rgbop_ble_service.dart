@@ -13,10 +13,12 @@ class RGBopBleService {
 
   BluetoothDevice? targetDevice;
 
-  // 1. Scan exclusively for the RGBop matrix panel
-  Future<void> scanForRGBop() async {
+  // 1. Scan for candidate RGBop panels and return unique devices.
+  Future<List<BluetoothDevice>> scanForRGBop({
+    Duration timeout = const Duration(seconds: 12),
+  }) async {
     // Check if the physical Bluetooth radio is turned on
-debugPrint("[BLE] Waiting for iOS Bluetooth manager to wake up...");
+    debugPrint("[BLE] Waiting for iOS Bluetooth manager to wake up...");
     
     // Wait until the adapter state explicitly reports 'on' before continuing
     await FlutterBluePlus.adapterState
@@ -25,7 +27,7 @@ debugPrint("[BLE] Waiting for iOS Bluetooth manager to wake up...");
         
     debugPrint("[BLE] Adapter is ON. Proceeding with scan.");
 
-    debugPrint("[BLE] Starting targeted scan for RGBop-Setup...");
+    debugPrint("[BLE] Starting targeted scan for RGBop provisioning devices...");
     
     // We filter the scan explicitly by our custom Service UUID 
     // so the app ignores random headphones, TVs, or beacons nearby.
@@ -33,12 +35,8 @@ debugPrint("[BLE] Waiting for iOS Bluetooth manager to wake up...");
      // withServices: [Guid(provServiceUuid)],
      // timeout: const Duration(seconds: 15),
     //);
-    await FlutterBluePlus.startScan(
-      timeout: const Duration(seconds: 15),
-    );
-
-// Listen to the incoming scan results stream
-    FlutterBluePlus.scanResults.listen((results) {
+    final candidates = <String, BluetoothDevice>{};
+    final sub = FlutterBluePlus.scanResults.listen((results) {
       for (ScanResult r in results) {
         
         // --- DIAGNOSTIC RADAR SWEEP ---
@@ -47,19 +45,34 @@ debugPrint("[BLE] Waiting for iOS Bluetooth manager to wake up...");
         debugPrint("[BLE Radar] Seen: '${r.device.platformName}' | AdvName: '${r.advertisementData.advName}' | UUIDs: ${r.advertisementData.serviceUuids}");
 
         // We now check for the Name OR our specific Service UUID
-        if (r.device.platformName == "RGBop-Setup" || 
+        if (r.device.platformName == "RGBop-Setup" ||
             r.advertisementData.advName == "RGBop-Setup" ||
             r.advertisementData.serviceUuids.contains(Guid(provServiceUuid))) {
-          
-          debugPrint("[BLE] FOUND THE PANEL! Device ID: ${r.device.remoteId}");
-          targetDevice = r.device;
-          
-          // Stop scanning immediately to preserve radio bandwidth and power
-          FlutterBluePlus.stopScan();
-          connectToDevice(r.device);
+
+          final id = r.device.remoteId.str;
+          if (!candidates.containsKey(id)) {
+            debugPrint("[BLE] Candidate panel found: ${r.device.platformName} (${r.device.remoteId})");
+          }
+          candidates[id] = r.device;
         }
       }
     });
+
+    await FlutterBluePlus.startScan(timeout: timeout);
+
+    // Add a tiny grace window so late results are processed after the timeout.
+    await Future.delayed(const Duration(milliseconds: 300));
+
+    try {
+      await FlutterBluePlus.stopScan();
+    } catch (_) {
+      // Ignore if already stopped by the platform timeout.
+    }
+    await sub.cancel();
+
+    final found = candidates.values.toList();
+    debugPrint("[BLE] Scan complete. Found ${found.length} candidate panel(s).");
+    return found;
   }
 
   // 2. Establish the BLE connection

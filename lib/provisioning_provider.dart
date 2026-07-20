@@ -8,6 +8,7 @@ class ProvisioningProvider extends ChangeNotifier {
   bool isConnected = false;
   bool isSending = false;
   String statusMessage = "Looking for RGBop panels...";
+  List<String> candidateDeviceIds = const [];
 
   ProvisioningProvider() {
     // Start scanning the moment the provider is initialized
@@ -19,27 +20,65 @@ class ProvisioningProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await _bleService.scanForRGBop();
-      
-      // We will loop and wait for the targetDevice to populate in the service
-      // (In production, you'd want a cleaner stream listener here)
-      while (_bleService.targetDevice == null) {
-        await Future.delayed(const Duration(milliseconds: 500));
+      final devices = await _bleService.scanForRGBop();
+      candidateDeviceIds = devices.map((d) => d.remoteId.str).toList();
+
+      if (devices.isEmpty) {
+        statusMessage = "No provisioning panel found. Power cycle board and retry.";
+        isScanning = false;
+        notifyListeners();
+        return;
       }
 
-      statusMessage = "Connecting to panel...";
-      notifyListeners();
+      if (devices.length == 1) {
+        await connectToCandidate(devices.first.remoteId.str);
+        return;
+      }
 
-      await Future.delayed(const Duration(seconds: 1)); // Give the connection a second to settle
-      
-      isConnected = true;
+      statusMessage = "Multiple panels found. Select one by device ID.";
       isScanning = false;
-      statusMessage = "Connected!";
       notifyListeners();
 
     } catch (e) {
       statusMessage = "Connection failed. Please try again.";
       isScanning = false;
+      notifyListeners();
+    }
+  }
+
+  Future<void> retryScan() async {
+    isConnected = false;
+    isSending = false;
+    candidateDeviceIds = const [];
+    statusMessage = "Looking for RGBop panels...";
+    notifyListeners();
+    await _startProvisioningFlow();
+  }
+
+  Future<void> connectToCandidate(String deviceId) async {
+    isScanning = true;
+    statusMessage = "Connecting to panel $deviceId...";
+    notifyListeners();
+
+    try {
+      final devices = await _bleService.scanForRGBop(timeout: const Duration(seconds: 6));
+      final match = devices.where((d) => d.remoteId.str == deviceId).toList();
+      if (match.isEmpty) {
+        isScanning = false;
+        statusMessage = "Selected panel not found. Keep only target panel powered, then retry.";
+        notifyListeners();
+        return;
+      }
+
+      await _bleService.connectToDevice(match.first);
+      _bleService.targetDevice = match.first;
+      isConnected = true;
+      isScanning = false;
+      statusMessage = "Connected!";
+      notifyListeners();
+    } catch (e) {
+      isScanning = false;
+      statusMessage = "Connection failed. Please try again.";
       notifyListeners();
     }
   }

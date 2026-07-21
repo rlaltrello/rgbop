@@ -28,8 +28,13 @@ class DoodleItem {
 
 class DoodleGallery extends StatefulWidget {
   final String? panelIp;
+  final bool offlineMode;
 
-  const DoodleGallery({super.key, this.panelIp});
+  const DoodleGallery({
+    super.key,
+    this.panelIp,
+    this.offlineMode = false,
+  });
 
   @override
   State<DoodleGallery> createState() => _DoodleGalleryState();
@@ -58,6 +63,11 @@ class _DoodleGalleryState extends State<DoodleGallery> {
   void dispose() {
     _messageTimer?.cancel();
     super.dispose();
+  }
+
+  bool get _isOffline {
+    final routeIp = widget.panelIp?.trim();
+    return widget.offlineMode || routeIp == null || routeIp.isEmpty;
   }
 
   Future<String> _resolvePanelBaseUrl() async {
@@ -126,46 +136,53 @@ class _DoodleGalleryState extends State<DoodleGallery> {
       );
     }
 
-    final baseUrl = await _resolvePanelBaseUrl();
-    final remoteNames = await _fetchRemoteDoodleNames(baseUrl);
-    final storageInfo = await _fetchStorageInfo(baseUrl);
-
-    for (final remoteName in remoteNames) {
-      if (map.containsKey(remoteName)) {
-        final existing = map[remoteName]!;
-        map[remoteName] = DoodleItem(
-          filename: remoteName,
-          isLocal: true,
-          isRemote: true,
-          localFile: existing.localFile,
-          pixels: existing.pixels,
-        );
-        continue;
-      }
-
-      List<Color>? remotePixels;
+    PanelStorageInfo? storageInfo;
+    if (!_isOffline) {
       try {
-        final thumb = await http
-            .get(
-              Uri.parse(
-                '$baseUrl/api/doodle/download?name=${Uri.encodeComponent(remoteName)}',
-              ),
-            )
-            .timeout(const Duration(seconds: 6));
+        final baseUrl = await _resolvePanelBaseUrl();
+        final remoteNames = await _fetchRemoteDoodleNames(baseUrl);
+        storageInfo = await _fetchStorageInfo(baseUrl);
 
-        if (thumb.statusCode == 200) {
-          remotePixels = _parseRGB565(thumb.bodyBytes);
+        for (final remoteName in remoteNames) {
+          if (map.containsKey(remoteName)) {
+            final existing = map[remoteName]!;
+            map[remoteName] = DoodleItem(
+              filename: remoteName,
+              isLocal: true,
+              isRemote: true,
+              localFile: existing.localFile,
+              pixels: existing.pixels,
+            );
+            continue;
+          }
+
+          List<Color>? remotePixels;
+          try {
+            final thumb = await http
+                .get(
+                  Uri.parse(
+                    '$baseUrl/api/doodle/download?name=${Uri.encodeComponent(remoteName)}',
+                  ),
+                )
+                .timeout(const Duration(seconds: 6));
+
+            if (thumb.statusCode == 200) {
+              remotePixels = _parseRGB565(thumb.bodyBytes);
+            }
+          } catch (_) {
+            remotePixels = null;
+          }
+
+          map[remoteName] = DoodleItem(
+            filename: remoteName,
+            isLocal: false,
+            isRemote: true,
+            pixels: remotePixels,
+          );
         }
       } catch (_) {
-        remotePixels = null;
+        // Keep local-only behavior available when panel reachability fails.
       }
-
-      map[remoteName] = DoodleItem(
-        filename: remoteName,
-        isLocal: false,
-        isRemote: true,
-        pixels: remotePixels,
-      );
     }
 
     final doodles = map.values.toList()
@@ -313,6 +330,10 @@ class _DoodleGalleryState extends State<DoodleGallery> {
 
   Future<void> _importRemoteDoodle(DoodleItem doodle) async {
     if (doodle.isLocal || !doodle.isRemote) return;
+    if (_isOffline) {
+      _showSnack('Offline mode: connect to a panel to import remote doodles.');
+      return;
+    }
 
     try {
       final baseUrl = await _resolvePanelBaseUrl();
@@ -342,6 +363,10 @@ class _DoodleGalleryState extends State<DoodleGallery> {
 
   Future<void> _syncLocalToPanel() async {
     if (_isSyncing) return;
+    if (_isOffline) {
+      _showSnack('Offline mode: connect to a panel to sync doodles.');
+      return;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -459,7 +484,11 @@ class _DoodleGalleryState extends State<DoodleGallery> {
 
   Future<void> _openLocalEditor(DoodleItem doodle) async {
     if (!doodle.isLocal) {
-      _showSnack('Import this remote doodle first to edit locally.');
+      _showSnack(
+        _isOffline
+            ? 'This doodle is remote-only. Reconnect to import it locally first.'
+            : 'Import this remote doodle first to edit locally.',
+      );
       return;
     }
 
@@ -519,17 +548,18 @@ class _DoodleGalleryState extends State<DoodleGallery> {
     return Scaffold(
       backgroundColor: Colors.grey[900],
       appBar: AppBar(
-        title: const Text('My Doodles'),
+        title: Text(_isOffline ? 'My Doodles (Offline)' : 'My Doodles'),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadAllDoodles,
           ),
-          IconButton(
-            icon: const Icon(Icons.sync),
-            onPressed: _isSyncing ? null : _syncLocalToPanel,
-            tooltip: 'Sync local doodles to panel',
-          ),
+          if (!_isOffline)
+            IconButton(
+              icon: const Icon(Icons.sync),
+              onPressed: _isSyncing ? null : _syncLocalToPanel,
+              tooltip: 'Sync local doodles to panel',
+            ),
           IconButton(icon: const Icon(Icons.add), onPressed: _createDoodle),
         ],
       ),
@@ -555,7 +585,7 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                       ],
                     ),
                   ),
-                if (_storageInfo != null)
+                if (!_isOffline && _storageInfo != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: PanelStorageSection(info: _storageInfo!),
@@ -674,7 +704,9 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                                             ),
                                           ),
                                         ),
-                                      if (!doodle.isLocal && doodle.isRemote)
+                                      if (!_isOffline &&
+                                          !doodle.isLocal &&
+                                          doodle.isRemote)
                                         Positioned(
                                           right: 4,
                                           bottom: 4,

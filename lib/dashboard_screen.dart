@@ -313,7 +313,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     if (_connectionFailed || _panelIp == null) {
       return Scaffold(
-        appBar: AppBar(title: const Text("RGBop Control")),
+        appBar: AppBar(
+          leadingWidth: 86,
+          leading: TextButton.icon(
+            onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+            icon: const Icon(Icons.arrow_back, size: 18),
+            label: const Text('Exit'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.only(left: 8),
+            ),
+          ),
+          title: const Text("RGBop Control"),
+        ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(24.0),
@@ -378,6 +390,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leadingWidth: 86,
+        leading: TextButton.icon(
+          onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+          icon: const Icon(Icons.arrow_back, size: 18),
+          label: const Text('Exit'),
+          style: TextButton.styleFrom(
+            foregroundColor: Colors.white,
+            padding: const EdgeInsets.only(left: 8),
+          ),
+        ),
         title: const Text("RGBop Control"),
         actions: [
           _isSaving
@@ -660,7 +682,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 if (_panelIp == null || _panelIp!.isEmpty) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('No panel selected. Return to picker and reconnect.'),
+                      content: Text(
+                        'No panel selected. Return to picker and reconnect.',
+                      ),
                     ),
                   );
                   return;

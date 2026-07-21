@@ -28,9 +28,14 @@ class GifItem {
 }
 
 class GifManagerScreen extends StatefulWidget {
-  final String panelIp;
+  final String? panelIp;
+  final bool offlineMode;
 
-  const GifManagerScreen({super.key, required this.panelIp});
+  const GifManagerScreen({
+    super.key,
+    this.panelIp,
+    this.offlineMode = false,
+  });
 
   @override
   State<GifManagerScreen> createState() => _GifManagerScreenState();
@@ -62,7 +67,16 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     super.dispose();
   }
 
-  String get _baseUrl => 'http://${widget.panelIp}';
+  bool get _isOffline {
+    final ip = widget.panelIp?.trim();
+    return widget.offlineMode || ip == null || ip.isEmpty;
+  }
+
+  String? get _baseUrl {
+    final ip = widget.panelIp?.trim();
+    if (ip == null || ip.isEmpty) return null;
+    return 'http://$ip';
+  }
 
   Future<Directory> _localGifDirectory() async {
     final documentsDir = await getApplicationDocumentsDirectory();
@@ -92,39 +106,44 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
       );
     }
 
-    try {
-      final response = await http
-          .get(Uri.parse('$_baseUrl/api/gifs'))
-          .timeout(const Duration(seconds: 6));
+    PanelStorageInfo? storageInfo;
+    final baseUrl = _baseUrl;
 
-      if (response.statusCode == 200) {
-        final decoded = jsonDecode(response.body);
-        final remoteGifs = decoded is Map<String, dynamic>
-            ? decoded['gifs'] as List<dynamic>? ?? const []
-            : const [];
+    if (!_isOffline && baseUrl != null) {
+      try {
+        final response = await http
+            .get(Uri.parse('$baseUrl/api/gifs'))
+            .timeout(const Duration(seconds: 6));
 
-        for (final entry in remoteGifs) {
-          if (entry is! Map) continue;
+        if (response.statusCode == 200) {
+          final decoded = jsonDecode(response.body);
+          final remoteGifs = decoded is Map<String, dynamic>
+              ? decoded['gifs'] as List<dynamic>? ?? const []
+              : const [];
 
-          final filename = entry['name']?.toString();
-          if (filename == null || filename.isEmpty) continue;
+          for (final entry in remoteGifs) {
+            if (entry is! Map) continue;
 
-          final existing = itemsByName[filename];
-          itemsByName[filename] = GifItem(
-            filename: filename,
-            isLocal: existing?.isLocal ?? false,
-            isRemote: true,
-            localFile: existing?.localFile,
-            remoteSize: _parseRemoteSize(entry['size']),
-            remoteEnabled: entry['enabled'] != false,
-          );
+            final filename = entry['name']?.toString();
+            if (filename == null || filename.isEmpty) continue;
+
+            final existing = itemsByName[filename];
+            itemsByName[filename] = GifItem(
+              filename: filename,
+              isLocal: existing?.isLocal ?? false,
+              isRemote: true,
+              localFile: existing?.localFile,
+              remoteSize: _parseRemoteSize(entry['size']),
+              remoteEnabled: entry['enabled'] != false,
+            );
+          }
         }
+      } catch (_) {
+        // Keep local-first workflows available even when the panel is offline.
       }
-    } catch (_) {
-      // Keep local-first workflows available even when the panel is offline.
-    }
 
-    final storageInfo = await _fetchStorageInfo(_baseUrl);
+      storageInfo = await _fetchStorageInfo(baseUrl);
+    }
 
     final gifs = itemsByName.values.toList()
       ..sort(
@@ -255,10 +274,20 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
 
   Future<void> _importRemoteGif(GifItem gif) async {
     if (gif.isLocal || !gif.isRemote) return;
+    if (_isOffline) {
+      _showSnack('Offline mode: connect to a panel to import remote GIFs.');
+      return;
+    }
+
+    final baseUrl = _baseUrl;
+    if (baseUrl == null) {
+      _showSnack('No panel target available.');
+      return;
+    }
 
     try {
       final response = await http
-          .get(Uri.parse('$_baseUrl/gifs/${Uri.encodeComponent(gif.filename)}'))
+          .get(Uri.parse('$baseUrl/gifs/${Uri.encodeComponent(gif.filename)}'))
           .timeout(const Duration(seconds: 10));
 
       if (response.statusCode != 200) {
@@ -279,10 +308,20 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
 
   Future<void> _toggleRemoteGif(GifItem gif) async {
     if (!gif.isRemote) return;
+    if (_isOffline) {
+      _showSnack('Offline mode: connect to a panel to toggle GIF visibility.');
+      return;
+    }
+
+    final baseUrl = _baseUrl;
+    if (baseUrl == null) {
+      _showSnack('No panel target available.');
+      return;
+    }
 
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/gifs/toggle'),
+        Uri.parse('$baseUrl/api/gifs/toggle'),
         body: {
           'name': gif.filename,
           'enabled': (!gif.remoteEnabled).toString(),
@@ -301,6 +340,16 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
 
   Future<void> _syncLocalToPanel() async {
     if (_isSyncing) return;
+    if (_isOffline) {
+      _showSnack('Offline mode: connect to a panel to sync GIFs.');
+      return;
+    }
+
+    final baseUrl = _baseUrl;
+    if (baseUrl == null) {
+      _showSnack('No panel target available.');
+      return;
+    }
 
     final confirmed = await showDialog<bool>(
       context: context,
@@ -347,7 +396,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
 
       setState(() => _syncStatus = 'Clearing panel GIFs...');
       final clearResponse = await http
-          .post(Uri.parse('$_baseUrl/api/gifs/clear'))
+          .post(Uri.parse('$baseUrl/api/gifs/clear'))
           .timeout(const Duration(seconds: 10));
 
       if (clearResponse.statusCode != 200 && clearResponse.statusCode != 404) {
@@ -364,7 +413,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
         try {
           final request = http.MultipartRequest(
             'POST',
-            Uri.parse('$_baseUrl/api/gifs/upload'),
+            Uri.parse('$baseUrl/api/gifs/upload'),
           );
           request.files.add(
             await http.MultipartFile.fromPath('file', file.path),
@@ -477,19 +526,26 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
   }
 
   Widget _buildGifPreview(GifItem gif) {
+    final baseUrl = _baseUrl;
     final image = gif.isLocal && gif.localFile != null
-        ? Image.file(
-            gif.localFile!,
+      ? Image.file(
+        gif.localFile!,
+        fit: BoxFit.cover,
+        errorBuilder: (context, error, stackTrace) =>
+          const Icon(Icons.broken_image, color: Colors.grey, size: 32),
+        )
+      : (baseUrl == null
+          ? const Icon(Icons.broken_image, color: Colors.grey, size: 32)
+          : Image.network(
+            '$baseUrl/gifs/${Uri.encodeComponent(gif.filename)}',
             fit: BoxFit.cover,
             errorBuilder: (context, error, stackTrace) =>
-                const Icon(Icons.broken_image, color: Colors.grey, size: 32),
-          )
-        : Image.network(
-            '$_baseUrl/gifs/${Uri.encodeComponent(gif.filename)}',
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) =>
-                const Icon(Icons.broken_image, color: Colors.grey, size: 32),
-          );
+              const Icon(
+              Icons.broken_image,
+              color: Colors.grey,
+              size: 32,
+              ),
+          ));
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(4),
@@ -543,14 +599,15 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     return Scaffold(
       backgroundColor: Colors.grey[900],
       appBar: AppBar(
-        title: const Text('My GIFs'),
+        title: Text(_isOffline ? 'My GIFs (Offline)' : 'My GIFs'),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAllGifs),
-          IconButton(
-            icon: const Icon(Icons.sync),
-            onPressed: _isSyncing ? null : _syncLocalToPanel,
-            tooltip: 'Sync local GIFs to panel',
-          ),
+          if (!_isOffline)
+            IconButton(
+              icon: const Icon(Icons.sync),
+              onPressed: _isSyncing ? null : _syncLocalToPanel,
+              tooltip: 'Sync local GIFs to panel',
+            ),
           IconButton(icon: const Icon(Icons.add), onPressed: _addLocalGif),
         ],
       ),
@@ -576,7 +633,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                       ],
                     ),
                   ),
-                if (_storageInfo != null)
+                if (!_isOffline && _storageInfo != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: PanelStorageSection(info: _storageInfo!),
@@ -698,7 +755,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                                         ),
                                       ),
                                     ),
-                                    if (gif.isRemote)
+                                    if (!_isOffline && gif.isRemote)
                                       Positioned(
                                         top: 4,
                                         right: 4,
@@ -743,7 +800,9 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                                           ),
                                         ),
                                       ),
-                                    if (!gif.isLocal && gif.isRemote)
+                                    if (!_isOffline &&
+                                        !gif.isLocal &&
+                                        gif.isRemote)
                                       Positioned(
                                         right: 4,
                                         bottom: 42,

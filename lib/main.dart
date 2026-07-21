@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'offline_studio_screen.dart';
 import 'setup_screen.dart';
 import 'dashboard_screen.dart';
 import 'rgbop_mdns_service.dart'; // Add your mDNS service here
@@ -35,6 +37,7 @@ class RGBopApp extends StatelessWidget {
         '/setup': (context) =>
             SetupScreen(), // Setup is now explicitly '/setup'
         '/dashboard': (context) => const DashboardScreen(),
+        '/offline': (context) => const OfflineStudioScreen(),
       },
     );
   }
@@ -49,9 +52,13 @@ class BootRouter extends StatefulWidget {
 }
 
 class _BootRouterState extends State<BootRouter> {
+  static const String _recentHostsKey = 'recent_successful_hosts';
+  static const int _maxRecentHosts = 8;
+
   final RGBopMdnsService _mdnsService = RGBopMdnsService();
   final TextEditingController _manualHostCtrl = TextEditingController();
   List<RGBopPanel> _panels = const [];
+  List<String> _recentHosts = const [];
   bool _isScanning = true;
   bool _isManualConnecting = false;
   String? _scanError;
@@ -59,7 +66,52 @@ class _BootRouterState extends State<BootRouter> {
   @override
   void initState() {
     super.initState();
+    _loadRecentHosts();
     _refreshPanels();
+  }
+
+  Future<void> _loadRecentHosts() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getStringList(_recentHostsKey) ?? const [];
+    if (!mounted) return;
+    setState(() {
+      _recentHosts = saved;
+    });
+  }
+
+  Future<void> _rememberHost(String hostOrIp) async {
+    final value = hostOrIp.trim();
+    if (value.isEmpty) return;
+
+    final current = _recentHosts
+        .where((h) => h.toLowerCase() != value.toLowerCase())
+        .toList();
+    current.insert(0, value);
+    if (current.length > _maxRecentHosts) {
+      current.removeRange(_maxRecentHosts, current.length);
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_recentHostsKey, current);
+
+    if (!mounted) return;
+    setState(() {
+      _recentHosts = current;
+    });
+  }
+
+  Future<void> _removeRememberedHost(String hostOrIp) async {
+    final updated = _recentHosts
+        .where((h) => h.toLowerCase() != hostOrIp.toLowerCase())
+        .toList();
+
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setStringList(_recentHostsKey, updated);
+
+    if (!mounted) return;
+    setState(() {
+      _recentHosts = updated;
+    });
   }
 
   Future<void> _refreshPanels() async {
@@ -110,6 +162,7 @@ class _BootRouterState extends State<BootRouter> {
         return;
       }
 
+      await _rememberHost(input);
       _selectPanel(panel);
     } finally {
       if (mounted) {
@@ -119,7 +172,14 @@ class _BootRouterState extends State<BootRouter> {
   }
 
   void _selectPanel(RGBopPanel panel) {
+    _rememberHost(panel.hostname);
+    _rememberHost(panel.ip);
     Navigator.pushReplacementNamed(context, '/dashboard', arguments: panel.ip);
+  }
+
+  Future<void> _connectRememberedHost(String hostOrIp) async {
+    _manualHostCtrl.text = hostOrIp;
+    await _connectManualHost();
   }
 
   @override
@@ -178,6 +238,67 @@ class _BootRouterState extends State<BootRouter> {
               ),
               onSubmitted: (_) => _connectManualHost(),
             ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: Colors.amber),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: () => Navigator.pushNamed(context, '/offline'),
+                icon: const Icon(Icons.offline_bolt, color: Colors.amber),
+                label: const Text(
+                  'Work Offline (Local GIFs & Doodles)',
+                  style: TextStyle(color: Colors.amber),
+                ),
+              ),
+            ),
+            if (_recentHosts.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              const Text(
+                'Recent successful addresses',
+                style: TextStyle(color: Colors.white70, fontSize: 13),
+              ),
+              const SizedBox(height: 8),
+              ..._recentHosts.map(
+                (host) => Card(
+                  color: const Color(0xFF1A1A1A),
+                  margin: const EdgeInsets.only(bottom: 8),
+                  child: ListTile(
+                    dense: true,
+                    leading: const Icon(
+                      Icons.history,
+                      color: Colors.blueAccent,
+                    ),
+                    title: Text(host),
+                    trailing: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          tooltip: 'Use this address',
+                          icon: const Icon(
+                            Icons.login,
+                            color: Colors.blueAccent,
+                          ),
+                          onPressed: _isManualConnecting
+                              ? null
+                              : () => _connectRememberedHost(host),
+                        ),
+                        IconButton(
+                          tooltip: 'Remove from history',
+                          icon: const Icon(Icons.close, color: Colors.grey),
+                          onPressed: () => _removeRememberedHost(host),
+                        ),
+                      ],
+                    ),
+                    onTap: _isManualConnecting
+                        ? null
+                        : () => _connectRememberedHost(host),
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 24),
             if (_isScanning) ...[
               const Center(
@@ -202,7 +323,10 @@ class _BootRouterState extends State<BootRouter> {
                     title: Text(panel.displayName),
                     subtitle: Text('${panel.hostname}  |  ${panel.ip}'),
                     trailing: panel.isLegacyDiscovery
-                        ? const Icon(Icons.history_toggle_off, color: Colors.grey)
+                        ? const Icon(
+                            Icons.history_toggle_off,
+                            color: Colors.grey,
+                          )
                         : const Icon(Icons.chevron_right),
                     onTap: () => _selectPanel(panel),
                   ),

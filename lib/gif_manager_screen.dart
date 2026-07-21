@@ -98,7 +98,8 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
 
     for (final file in localFiles) {
       final name = file.path.split('/').last;
-      itemsByName[name] = GifItem(
+      final key = _canonicalGifKey(name);
+      itemsByName[key] = GifItem(
         filename: name,
         isLocal: true,
         isRemote: false,
@@ -124,17 +125,25 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
           for (final entry in remoteGifs) {
             if (entry is! Map) continue;
 
-            final filename = entry['name']?.toString();
-            if (filename == null || filename.isEmpty) continue;
+            final rawFilename = entry['name']?.toString();
+            final filename = _normalizeGifFilename(rawFilename);
+            if (filename.isEmpty) continue;
 
-            final existing = itemsByName[filename];
-            itemsByName[filename] = GifItem(
-              filename: filename,
+            final key = _canonicalGifKey(filename);
+            final existing = itemsByName[key];
+            final parsedSize = _parseRemoteSize(entry['size']);
+            itemsByName[key] = GifItem(
+              // Prefer local filename spelling/case when available.
+              filename: existing?.filename ?? filename,
               isLocal: existing?.isLocal ?? false,
               isRemote: true,
               localFile: existing?.localFile,
-              remoteSize: _parseRemoteSize(entry['size']),
-              remoteEnabled: entry['enabled'] != false,
+              remoteSize: parsedSize ?? existing?.remoteSize,
+              // If the backend returns duplicate variants, keep visible if any are enabled.
+              remoteEnabled:
+                  (existing?.isRemote ?? false)
+                  ? (existing!.remoteEnabled || entry['enabled'] != false)
+                  : (entry['enabled'] != false),
             );
           }
         }
@@ -177,6 +186,31 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     if (value is int) return value;
     if (value is num) return value.toInt();
     return int.tryParse(value?.toString() ?? '');
+  }
+
+  String _normalizeGifFilename(String? value) {
+    if (value == null) return '';
+
+    var normalized = value.trim();
+    if (normalized.isEmpty) return '';
+
+    try {
+      normalized = Uri.decodeComponent(normalized);
+    } catch (_) {
+      // Keep original when decode fails.
+    }
+
+    normalized = normalized.replaceAll('\\', '/');
+    if (normalized.contains('/')) {
+      normalized = normalized.split('/').last;
+    }
+
+    return normalized.trim();
+  }
+
+  String _canonicalGifKey(String filename) {
+    final normalized = _normalizeGifFilename(filename);
+    return normalized.toLowerCase();
   }
 
   Future<void> _addLocalGif() async {

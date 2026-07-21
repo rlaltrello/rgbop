@@ -127,7 +127,8 @@ class _DoodleGalleryState extends State<DoodleGallery> {
         pixels = null;
       }
 
-      map[name] = DoodleItem(
+      final key = _canonicalDoodleKey(name);
+      map[key] = DoodleItem(
         filename: name,
         isLocal: true,
         isRemote: false,
@@ -143,11 +144,16 @@ class _DoodleGalleryState extends State<DoodleGallery> {
         final remoteNames = await _fetchRemoteDoodleNames(baseUrl);
         storageInfo = await _fetchStorageInfo(baseUrl);
 
-        for (final remoteName in remoteNames) {
-          if (map.containsKey(remoteName)) {
-            final existing = map[remoteName]!;
-            map[remoteName] = DoodleItem(
-              filename: remoteName,
+        for (final rawRemoteName in remoteNames) {
+          final remoteName = _normalizeDoodleFilename(rawRemoteName);
+          if (remoteName.isEmpty) continue;
+
+          final key = _canonicalDoodleKey(remoteName);
+          if (map.containsKey(key)) {
+            final existing = map[key]!;
+            map[key] = DoodleItem(
+              // Keep local filename spelling/case when available.
+              filename: existing.filename,
               isLocal: true,
               isRemote: true,
               localFile: existing.localFile,
@@ -173,7 +179,7 @@ class _DoodleGalleryState extends State<DoodleGallery> {
             remotePixels = null;
           }
 
-          map[remoteName] = DoodleItem(
+          map[key] = DoodleItem(
             filename: remoteName,
             isLocal: false,
             isRemote: true,
@@ -226,6 +232,31 @@ class _DoodleGalleryState extends State<DoodleGallery> {
     }
 
     return pixels;
+  }
+
+  String _normalizeDoodleFilename(String? value) {
+    if (value == null) return '';
+
+    var normalized = value.trim();
+    if (normalized.isEmpty) return '';
+
+    try {
+      normalized = Uri.decodeComponent(normalized);
+    } catch (_) {
+      // Keep original when decode fails.
+    }
+
+    normalized = normalized.replaceAll('\\', '/');
+    if (normalized.contains('/')) {
+      normalized = normalized.split('/').last;
+    }
+
+    return normalized.trim();
+  }
+
+  String _canonicalDoodleKey(String filename) {
+    final normalized = _normalizeDoodleFilename(filename);
+    return normalized.toLowerCase();
   }
 
   void _showSnack(String message) {

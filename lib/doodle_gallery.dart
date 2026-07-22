@@ -433,6 +433,7 @@ class _DoodleGalleryState extends State<DoodleGallery> {
     });
 
     final failed = <String>[];
+    final deletedSurvivors = <String>[];
 
     try {
       final baseUrl = await _resolvePanelBaseUrl();
@@ -486,6 +487,31 @@ class _DoodleGalleryState extends State<DoodleGallery> {
         }
       }
 
+      // Enforce local-as-source-of-truth: remove any remote leftovers
+      // that survived clear but are not present in local storage.
+      setState(() => _syncStatus = 'Reconciling remote leftovers...');
+      final localKeys = localFiles
+          .map((f) => _canonicalDoodleKey(f.path.split('/').last))
+          .toSet();
+      final remoteNames = await _fetchRemoteDoodleNames(baseUrl);
+      for (final rawName in remoteNames) {
+        final normalized = _normalizeDoodleFilename(rawName);
+        if (normalized.isEmpty) continue;
+        if (localKeys.contains(_canonicalDoodleKey(normalized))) continue;
+
+        final deleted = await _deleteRemoteDoodle(baseUrl, normalized);
+        if (deleted) {
+          deletedSurvivors.add(normalized);
+        }
+      }
+
+      final afterCleanup = await _fetchRemoteDoodleNames(baseUrl);
+      final remainingSurvivors = afterCleanup
+          .map(_normalizeDoodleFilename)
+          .where((n) => n.isNotEmpty)
+          .where((n) => !localKeys.contains(_canonicalDoodleKey(n)))
+          .toList();
+
       if (mounted) {
         setState(() {
           _syncStatus = failed.isEmpty
@@ -498,7 +524,19 @@ class _DoodleGalleryState extends State<DoodleGallery> {
       await _loadAllDoodles();
 
       if (failed.isEmpty) {
-        _showSnack('Sync complete: uploaded ${localFiles.length}.');
+        if (remainingSurvivors.isEmpty) {
+          if (deletedSurvivors.isEmpty) {
+            _showSnack('Sync complete: uploaded ${localFiles.length}.');
+          } else {
+            _showSnack(
+              'Sync complete: uploaded ${localFiles.length}, removed ${deletedSurvivors.length} leftover remote doodle(s).',
+            );
+          }
+        } else {
+          _showSnack(
+            'Sync uploaded ${localFiles.length}, removed ${deletedSurvivors.length}, but ${remainingSurvivors.length} remote leftover doodle(s) remain.',
+          );
+        }
       } else {
         _showSnack('Sync finished with failures: ${failed.join(', ')}');
       }
@@ -510,6 +548,23 @@ class _DoodleGalleryState extends State<DoodleGallery> {
           _isSyncing = false;
         });
       }
+    }
+  }
+
+  Future<bool> _deleteRemoteDoodle(String baseUrl, String filename) async {
+    final normalized = _normalizeDoodleFilename(filename);
+    if (normalized.isEmpty) return false;
+
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/doodle/delete'),
+            body: {'name': normalized},
+          )
+          .timeout(const Duration(seconds: 6));
+      return response.statusCode == 200 || response.statusCode == 204;
+    } catch (_) {
+      return false;
     }
   }
 

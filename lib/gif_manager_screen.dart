@@ -77,6 +77,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
   Timer? _messageTimer;
   bool _isProcessingImport = false;
   final Map<String, Uint8List> _localPreviewCache = {};
+  final Map<String, Uint8List> _remotePreviewCache = {};
 
   @override
   void initState() {
@@ -113,6 +114,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
   Future<void> _loadAllGifs() async {
     setState(() => _isLoading = true);
     _localPreviewCache.clear();
+    _remotePreviewCache.clear();
 
     final itemsByName = <String, GifItem>{};
     final gifDir = await _localGifDirectory();
@@ -177,10 +179,16 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
       storageInfo = await _fetchStorageInfo(baseUrl);
     }
 
-    final gifs = itemsByName.values.toList()
-      ..sort(
-        (a, b) => a.filename.toLowerCase().compareTo(b.filename.toLowerCase()),
-      );
+    final gifs =
+        itemsByName.values
+            .where(
+              (gif) => !(gif.isRemote && !gif.isLocal && !gif.remoteEnabled),
+            )
+            .toList()
+          ..sort(
+            (a, b) =>
+                a.filename.toLowerCase().compareTo(b.filename.toLowerCase()),
+          );
 
     if (!mounted) return;
     setState(() {
@@ -549,6 +557,8 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     });
 
     final failed = <String>[];
+    final deletedSurvivors = <String>[];
+    final undeletedSurvivors = <String>[];
 
     try {
       final gifDir = await _localGifDirectory();
@@ -600,6 +610,30 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
         }
       }
 
+      // Enforce local-as-source-of-truth: remove any remote leftovers
+      // that survived panel clear but are not in local storage.
+      setState(() => _syncStatus = 'Reconciling remote leftovers...');
+      final localKeys = localFiles
+          .map((f) => _canonicalGifKey(f.path.split('/').last))
+          .toSet();
+      final remoteNames = await _fetchRemoteGifNames(baseUrl);
+      for (final remoteName in remoteNames) {
+        final key = _canonicalGifKey(remoteName);
+        if (localKeys.contains(key)) continue;
+
+        final deleted = await _deleteRemoteGif(baseUrl, remoteName);
+        if (deleted) {
+          deletedSurvivors.add(remoteName);
+        } else {
+          undeletedSurvivors.add(remoteName);
+        }
+      }
+
+      final afterCleanupNames = await _fetchRemoteGifNames(baseUrl);
+      final remainingSurvivors = afterCleanupNames
+          .where((name) => !localKeys.contains(_canonicalGifKey(name)))
+          .toList();
+
       if (mounted) {
         setState(() {
           _syncStatus = failed.isEmpty
@@ -612,7 +646,19 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
       await _loadAllGifs();
 
       if (failed.isEmpty) {
-        _showSnack('Sync complete: uploaded ${localFiles.length}.');
+        if (remainingSurvivors.isEmpty) {
+          if (deletedSurvivors.isEmpty) {
+            _showSnack('Sync complete: uploaded ${localFiles.length}.');
+          } else {
+            _showSnack(
+              'Sync complete: uploaded ${localFiles.length}, removed ${deletedSurvivors.length} leftover remote GIF(s).',
+            );
+          }
+        } else {
+          _showSnack(
+            'Sync uploaded ${localFiles.length}, removed ${deletedSurvivors.length}, but ${remainingSurvivors.length} remote leftover GIF(s) remain.',
+          );
+        }
       } else {
         _showSnack('Sync finished with failures: ${failed.join(', ')}');
       }
@@ -625,6 +671,93 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
         });
       }
     }
+  }
+
+  Future<List<String>> _fetchRemoteGifNames(String baseUrl) async {
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/gifs'))
+          .timeout(const Duration(seconds: 6));
+
+      if (response.statusCode != 200) return const [];
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) return const [];
+
+      final entries = decoded['gifs'];
+      if (entries is! List) return const [];
+
+      final names = <String>[];
+      for (final entry in entries) {
+        if (entry is! Map) continue;
+        final name = _normalizeGifFilename(entry['name']?.toString());
+        if (name.isNotEmpty) {
+          names.add(name);
+        }
+      }
+      return names;
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<bool> _deleteRemoteGif(String baseUrl, String filename) async {
+    final normalized = _normalizeGifFilename(filename);
+    if (normalized.isEmpty) return false;
+
+    // Firmware contract:
+    // POST /api/gifs/delete with form arg `name=<filename>`.
+    try {
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/gifs/delete'),
+            body: {'name': normalized},
+          )
+          .timeout(const Duration(seconds: 6));
+      if (response.statusCode == 200 || response.statusCode == 204) {
+        return true;
+      }
+    } catch (_) {
+      // Fall through to compatibility attempts below.
+    }
+
+    final candidates = <Uri>[
+      Uri.parse('$baseUrl/api/delete?file=${Uri.encodeComponent(normalized)}'),
+      Uri.parse(
+        '$baseUrl/api/delete?file=${Uri.encodeComponent('/gifs/$normalized')}',
+      ),
+      Uri.parse(
+        '$baseUrl/api/gifs/delete?name=${Uri.encodeComponent(normalized)}',
+      ),
+      Uri.parse(
+        '$baseUrl/api/gifs/delete?file=${Uri.encodeComponent(normalized)}',
+      ),
+    ];
+
+    for (final uri in candidates) {
+      try {
+        final deleteResp = await http
+            .delete(uri)
+            .timeout(const Duration(seconds: 6));
+        if (deleteResp.statusCode == 200 || deleteResp.statusCode == 204) {
+          return true;
+        }
+      } catch (_) {
+        // Try next candidate.
+      }
+
+      try {
+        final postResp = await http
+            .post(uri)
+            .timeout(const Duration(seconds: 6));
+        if (postResp.statusCode == 200 || postResp.statusCode == 204) {
+          return true;
+        }
+      } catch (_) {
+        // Try next candidate.
+      }
+    }
+
+    return false;
   }
 
   String _formatBytes(int bytes) {
@@ -690,7 +823,6 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
   }
 
   Widget _buildGifPreview(GifItem gif) {
-    final baseUrl = _baseUrl;
     final image = gif.isLocal && gif.localFile != null
         ? FutureBuilder<Uint8List?>(
             future: _loadLocalPreviewBytes(gif.localFile!),
@@ -715,17 +847,29 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
               );
             },
           )
-        : (baseUrl == null
-              ? const Icon(Icons.broken_image, color: Colors.grey, size: 32)
-              : Image.network(
-                  '$baseUrl/gifs/${Uri.encodeComponent(gif.filename)}',
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => const Icon(
-                    Icons.broken_image,
-                    color: Colors.grey,
-                    size: 32,
-                  ),
-                ));
+        : FutureBuilder<Uint8List?>(
+            future: _loadRemotePreviewBytes(gif.filename),
+            builder: (context, snapshot) {
+              final bytes = snapshot.data;
+              if (bytes == null) {
+                return const Icon(
+                  Icons.broken_image,
+                  color: Colors.grey,
+                  size: 32,
+                );
+              }
+              return Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.broken_image,
+                  color: Colors.grey,
+                  size: 32,
+                ),
+              );
+            },
+          );
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(4),
@@ -749,6 +893,34 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
       final frame = decoded.hasAnimation ? decoded.getFrame(0) : decoded;
       final pngBytes = Uint8List.fromList(img.encodePng(frame));
       _localPreviewCache[path] = pngBytes;
+      return pngBytes;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Uint8List?> _loadRemotePreviewBytes(String filename) async {
+    final cacheKey = _canonicalGifKey(filename);
+    final cached = _remotePreviewCache[cacheKey];
+    if (cached != null) return cached;
+
+    final baseUrl = _baseUrl;
+    if (baseUrl == null) return null;
+
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/gifs/${Uri.encodeComponent(filename)}'))
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode != 200) return null;
+
+      final decoded =
+          img.decodeGif(response.bodyBytes) ??
+          img.decodeImage(response.bodyBytes);
+      if (decoded == null) return null;
+
+      final frame = decoded.hasAnimation ? decoded.getFrame(0) : decoded;
+      final pngBytes = Uint8List.fromList(img.encodePng(frame));
+      _remotePreviewCache[cacheKey] = pngBytes;
       return pngBytes;
     } catch (_) {
       return null;

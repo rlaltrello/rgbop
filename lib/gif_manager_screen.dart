@@ -12,6 +12,8 @@ import 'package:path_provider/path_provider.dart';
 
 import 'panel_storage_info.dart';
 
+enum _GifImportMode { preserveOriginal, fitTo64 }
+
 class _GifImportResult {
   final List<int> bytes;
   final bool transformed;
@@ -260,10 +262,27 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
         _isProcessingImport = true;
       });
 
+      final sourceBytes = await File(sourcePath).readAsBytes();
+      final decoded = img.decodeGif(sourceBytes);
+      if (decoded == null) {
+        throw Exception('Could not decode GIF data.');
+      }
+
+      final importMode =
+          decoded.width > _expectedGifWidth ||
+              decoded.height > _expectedGifHeight
+          ? _GifImportMode.fitTo64
+          : _GifImportMode.preserveOriginal;
+
       final gifDir = await _localGifDirectory();
       final filename = sourcePath.split('/').last;
       final destination = File('${gifDir.path}/$filename');
-      final prepared = await _prepareGifForLocalSave(sourcePath);
+      final prepared = await _prepareGifForLocalSave(
+        sourcePath,
+        importMode,
+        sourceBytes: sourceBytes,
+        decodedGif: decoded,
+      );
 
       final tempPath = '${destination.path}.tmp';
       final tempFile = File(tempPath);
@@ -274,7 +293,15 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
       await tempFile.rename(destination.path);
 
       if (!prepared.transformed) {
-        _showSnack('Saved $filename to local GIF storage.');
+        if (importMode == _GifImportMode.preserveOriginal &&
+            (prepared.sourceWidth != _expectedGifWidth ||
+                prepared.sourceHeight != _expectedGifHeight)) {
+          _showSnack(
+            'Saved original $filename (${prepared.sourceWidth}x${prepared.sourceHeight}) with source colors preserved.',
+          );
+        } else {
+          _showSnack('Saved $filename to local GIF storage.');
+        }
       } else if (prepared.wasTrimmed) {
         _showSnack(
           'Saved $filename (${prepared.sourceWidth}x${prepared.sourceHeight} -> '
@@ -298,9 +325,14 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     }
   }
 
-  Future<_GifImportResult> _prepareGifForLocalSave(String sourcePath) async {
-    final bytes = await File(sourcePath).readAsBytes();
-    final decoded = img.decodeGif(bytes);
+  Future<_GifImportResult> _prepareGifForLocalSave(
+    String sourcePath,
+    _GifImportMode importMode, {
+    Uint8List? sourceBytes,
+    img.Image? decodedGif,
+  }) async {
+    final bytes = sourceBytes ?? await File(sourcePath).readAsBytes();
+    final decoded = decodedGif ?? img.decodeGif(bytes);
     if (decoded == null) {
       throw Exception('Could not decode GIF data.');
     }
@@ -308,6 +340,18 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     final sourceWidth = decoded.width;
     final sourceHeight = decoded.height;
     final sourceFrames = decoded.numFrames;
+
+    if (importMode == _GifImportMode.preserveOriginal) {
+      return _GifImportResult(
+        bytes: bytes,
+        transformed: false,
+        sourceWidth: sourceWidth,
+        sourceHeight: sourceHeight,
+        sourceFrames: sourceFrames,
+        outputFrames: sourceFrames,
+        wasTrimmed: false,
+      );
+    }
 
     if (sourceWidth == _expectedGifWidth &&
         sourceHeight == _expectedGifHeight) {
@@ -396,7 +440,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
       square,
       width: _expectedGifWidth,
       height: _expectedGifHeight,
-      interpolation: img.Interpolation.average,
+      interpolation: img.Interpolation.nearest,
     );
   }
 

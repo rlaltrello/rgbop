@@ -1,13 +1,36 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:convert';
+import 'dart:math' as math;
+import 'dart:typed_data';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 
 import 'panel_storage_info.dart';
+
+class _GifImportResult {
+  final List<int> bytes;
+  final bool transformed;
+  final int sourceWidth;
+  final int sourceHeight;
+  final int sourceFrames;
+  final int outputFrames;
+  final bool wasTrimmed;
+
+  const _GifImportResult({
+    required this.bytes,
+    required this.transformed,
+    required this.sourceWidth,
+    required this.sourceHeight,
+    required this.sourceFrames,
+    required this.outputFrames,
+    required this.wasTrimmed,
+  });
+}
 
 class GifItem {
   final String filename;
@@ -31,11 +54,7 @@ class GifManagerScreen extends StatefulWidget {
   final String? panelIp;
   final bool offlineMode;
 
-  const GifManagerScreen({
-    super.key,
-    this.panelIp,
-    this.offlineMode = false,
-  });
+  const GifManagerScreen({super.key, this.panelIp, this.offlineMode = false});
 
   @override
   State<GifManagerScreen> createState() => _GifManagerScreenState();
@@ -44,6 +63,8 @@ class GifManagerScreen extends StatefulWidget {
 class _GifManagerScreenState extends State<GifManagerScreen> {
   static const int _expectedGifWidth = 64;
   static const int _expectedGifHeight = 64;
+  static const int _maxProcessFrames = 150;
+  static const int _maxProcessDurationMs = 10000;
   static const double _snackBarLaneHeight = 76;
 
   List<GifItem> _gifs = [];
@@ -54,6 +75,8 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
   PanelStorageInfo? _storageInfo;
   String? _messageText;
   Timer? _messageTimer;
+  bool _isProcessingImport = false;
+  final Map<String, Uint8List> _localPreviewCache = {};
 
   @override
   void initState() {
@@ -89,6 +112,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
 
   Future<void> _loadAllGifs() async {
     setState(() => _isLoading = true);
+    _localPreviewCache.clear();
 
     final itemsByName = <String, GifItem>{};
     final gifDir = await _localGifDirectory();
@@ -140,8 +164,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
               localFile: existing?.localFile,
               remoteSize: parsedSize ?? existing?.remoteSize,
               // If the backend returns duplicate variants, keep visible if any are enabled.
-              remoteEnabled:
-                  (existing?.isRemote ?? false)
+              remoteEnabled: (existing?.isRemote ?? false)
                   ? (existing!.remoteEnabled || entry['enabled'] != false)
                   : (entry['enabled'] != false),
             );
@@ -214,6 +237,8 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
   }
 
   Future<void> _addLocalGif() async {
+    if (_isProcessingImport) return;
+
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: const ['gif'],
@@ -222,44 +247,149 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     final sourcePath = result?.files.single.path;
     if (sourcePath == null) return;
 
-    final dimensions = await _readGifDimensions(sourcePath);
-    if (dimensions == null) {
-      _showSnack('Could not read GIF dimensions.');
-      return;
-    }
-
-    if (dimensions.width != _expectedGifWidth ||
-        dimensions.height != _expectedGifHeight) {
-      _showSnack(
-        'GIF must be ${_expectedGifWidth}x$_expectedGifHeight. Selected file is '
-        '${dimensions.width.toInt()}x${dimensions.height.toInt()}.',
-      );
-      return;
-    }
-
     try {
+      setState(() {
+        _isProcessingImport = true;
+      });
+
       final gifDir = await _localGifDirectory();
-      final sourceFile = File(sourcePath);
       final filename = sourcePath.split('/').last;
       final destination = File('${gifDir.path}/$filename');
-      await sourceFile.copy(destination.path);
-      _showSnack('Saved $filename to local GIF storage.');
+      final prepared = await _prepareGifForLocalSave(sourcePath);
+
+      final tempPath = '${destination.path}.tmp';
+      final tempFile = File(tempPath);
+      await tempFile.writeAsBytes(prepared.bytes, flush: true);
+      if (await destination.exists()) {
+        await destination.delete();
+      }
+      await tempFile.rename(destination.path);
+
+      if (!prepared.transformed) {
+        _showSnack('Saved $filename to local GIF storage.');
+      } else if (prepared.wasTrimmed) {
+        _showSnack(
+          'Saved $filename (${prepared.sourceWidth}x${prepared.sourceHeight} -> '
+          '64x64, ${prepared.outputFrames}/${prepared.sourceFrames} frames).',
+        );
+      } else {
+        _showSnack(
+          'Saved $filename (${prepared.sourceWidth}x${prepared.sourceHeight} -> 64x64).',
+        );
+      }
+
       await _loadAllGifs();
     } catch (e) {
       _showSnack('Failed to save GIF locally: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isProcessingImport = false;
+        });
+      }
     }
   }
 
-  Future<Size?> _readGifDimensions(String path) async {
-    final bytes = await File(path).readAsBytes();
-    if (bytes.length < 10) return null;
+  Future<_GifImportResult> _prepareGifForLocalSave(String sourcePath) async {
+    final bytes = await File(sourcePath).readAsBytes();
+    final decoded = img.decodeGif(bytes);
+    if (decoded == null) {
+      throw Exception('Could not decode GIF data.');
+    }
 
-    final signature = String.fromCharCodes(bytes.sublist(0, 6));
-    if (signature != 'GIF87a' && signature != 'GIF89a') return null;
+    final sourceWidth = decoded.width;
+    final sourceHeight = decoded.height;
+    final sourceFrames = decoded.numFrames;
 
-    final width = bytes[6] | (bytes[7] << 8);
-    final height = bytes[8] | (bytes[9] << 8);
-    return Size(width.toDouble(), height.toDouble());
+    if (sourceWidth == _expectedGifWidth &&
+        sourceHeight == _expectedGifHeight) {
+      return _GifImportResult(
+        bytes: bytes,
+        transformed: false,
+        sourceWidth: sourceWidth,
+        sourceHeight: sourceHeight,
+        sourceFrames: sourceFrames,
+        outputFrames: sourceFrames,
+        wasTrimmed: false,
+      );
+    }
+
+    var processedFrames = 0;
+    var durationMs = 0;
+    img.Image? transformedRoot;
+
+    for (var i = 0; i < decoded.numFrames; i++) {
+      if (processedFrames >= _maxProcessFrames) break;
+
+      final sourceFrame = decoded.getFrame(i);
+      // Some GIFs use 0ms/very low frame delays that can be unstable across decoders.
+      final sourceFrameDuration = sourceFrame.frameDuration;
+      final frameDuration = sourceFrameDuration <= 0
+          ? 100
+          : math.max(sourceFrameDuration, 20);
+
+      if (processedFrames > 0 && durationMs >= _maxProcessDurationMs) {
+        break;
+      }
+
+      final transformedPixels = _transformFrameFillTo64(sourceFrame);
+      // Ensure each encoded frame is a standalone frame (no inherited animation list).
+      final transformedFrame = img.Image.from(
+        transformedPixels,
+        noAnimation: true,
+      )..frameDuration = frameDuration;
+
+      if (transformedRoot == null) {
+        transformedRoot = img.Image.from(transformedFrame, noAnimation: true)
+          ..frameDuration = frameDuration
+          ..loopCount = decoded.loopCount <= 0 ? 0 : decoded.loopCount
+          ..frameType = img.FrameType.animation;
+      } else {
+        transformedRoot.addFrame(transformedFrame);
+      }
+
+      processedFrames++;
+      durationMs += frameDuration;
+    }
+
+    if (transformedRoot == null) {
+      throw Exception('GIF has no decodable frames.');
+    }
+
+    final encodedBytes = img.encodeGif(transformedRoot);
+    final wasTrimmed =
+        processedFrames < sourceFrames || durationMs >= _maxProcessDurationMs;
+
+    return _GifImportResult(
+      bytes: encodedBytes,
+      transformed: true,
+      sourceWidth: sourceWidth,
+      sourceHeight: sourceHeight,
+      sourceFrames: sourceFrames,
+      outputFrames: processedFrames,
+      wasTrimmed: wasTrimmed,
+    );
+  }
+
+  img.Image _transformFrameFillTo64(img.Image frame) {
+    final side = math.min(frame.width, frame.height);
+    final cropX = ((frame.width - side) / 2).floor();
+    final cropY = ((frame.height - side) / 2).floor();
+
+    final square = img.copyCrop(
+      frame,
+      x: cropX,
+      y: cropY,
+      width: side,
+      height: side,
+    );
+
+    return img.copyResize(
+      square,
+      width: _expectedGifWidth,
+      height: _expectedGifHeight,
+      interpolation: img.Interpolation.average,
+    );
   }
 
   Future<void> _confirmDeleteLocalGif(GifItem gif) async {
@@ -562,24 +692,40 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
   Widget _buildGifPreview(GifItem gif) {
     final baseUrl = _baseUrl;
     final image = gif.isLocal && gif.localFile != null
-      ? Image.file(
-        gif.localFile!,
-        fit: BoxFit.cover,
-        errorBuilder: (context, error, stackTrace) =>
-          const Icon(Icons.broken_image, color: Colors.grey, size: 32),
-        )
-      : (baseUrl == null
-          ? const Icon(Icons.broken_image, color: Colors.grey, size: 32)
-          : Image.network(
-            '$baseUrl/gifs/${Uri.encodeComponent(gif.filename)}',
-            fit: BoxFit.cover,
-            errorBuilder: (context, error, stackTrace) =>
-              const Icon(
-              Icons.broken_image,
-              color: Colors.grey,
-              size: 32,
-              ),
-          ));
+        ? FutureBuilder<Uint8List?>(
+            future: _loadLocalPreviewBytes(gif.localFile!),
+            builder: (context, snapshot) {
+              final bytes = snapshot.data;
+              if (bytes == null) {
+                return const Icon(
+                  Icons.broken_image,
+                  color: Colors.grey,
+                  size: 32,
+                );
+              }
+              return Image.memory(
+                bytes,
+                fit: BoxFit.cover,
+                gaplessPlayback: true,
+                errorBuilder: (context, error, stackTrace) => const Icon(
+                  Icons.broken_image,
+                  color: Colors.grey,
+                  size: 32,
+                ),
+              );
+            },
+          )
+        : (baseUrl == null
+              ? const Icon(Icons.broken_image, color: Colors.grey, size: 32)
+              : Image.network(
+                  '$baseUrl/gifs/${Uri.encodeComponent(gif.filename)}',
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => const Icon(
+                    Icons.broken_image,
+                    color: Colors.grey,
+                    size: 32,
+                  ),
+                ));
 
     return ClipRRect(
       borderRadius: BorderRadius.circular(4),
@@ -588,6 +734,25 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
         child: Center(child: image),
       ),
     );
+  }
+
+  Future<Uint8List?> _loadLocalPreviewBytes(File file) async {
+    final path = file.path;
+    final cached = _localPreviewCache[path];
+    if (cached != null) return cached;
+
+    try {
+      final bytes = await file.readAsBytes();
+      final decoded = img.decodeGif(bytes) ?? img.decodeImage(bytes);
+      if (decoded == null) return null;
+
+      final frame = decoded.hasAnimation ? decoded.getFrame(0) : decoded;
+      final pngBytes = Uint8List.fromList(img.encodePng(frame));
+      _localPreviewCache[path] = pngBytes;
+      return pngBytes;
+    } catch (_) {
+      return null;
+    }
   }
 
   Color _borderColor(GifItem gif) {
@@ -642,7 +807,19 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
               onPressed: _isSyncing ? null : _syncLocalToPanel,
               tooltip: 'Sync local GIFs to panel',
             ),
-          IconButton(icon: const Icon(Icons.add), onPressed: _addLocalGif),
+          _isProcessingImport
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                )
+              : IconButton(
+                  icon: const Icon(Icons.add),
+                  onPressed: _addLocalGif,
+                ),
         ],
       ),
       bottomNavigationBar: _buildMessageLane(),

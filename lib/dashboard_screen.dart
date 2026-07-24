@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'rgbop_mdns_service.dart';
 import 'gif_manager_screen.dart';
 import 'package:geolocator/geolocator.dart';
 import 'doodle_gallery.dart';
+import 'spotify_auth_callback_controller.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -20,6 +23,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _connectionFailed = false;
   bool _isSaving = false;
   bool _isResetting = false;
+  bool _isAuthorizingSpotify = false;
 
   // --- Settings State ---
   bool _showClock = true;
@@ -29,6 +33,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _showISS = true;
   bool _showPlanes = true;
   bool _showEarthquake = true;
+  bool _showSpotify = true;
   bool _showTextBlast = true;
   bool _showDoodles = true;
   double _brightness = 128;
@@ -42,6 +47,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final TextEditingController _lngCtrl = TextEditingController();
   final TextEditingController _osUserCtrl = TextEditingController();
   final TextEditingController _osPassCtrl = TextEditingController();
+  final TextEditingController _spotifyRefreshTokenCtrl =
+      TextEditingController();
+  late final VoidCallback _spotifyCallbackListener;
+  String? _lastHandledSpotifyCallbackUri;
 
   String _formatHour(int h) {
     if (h == 0) return "12 AM";
@@ -107,6 +116,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _dashboardInitialized = false;
 
   @override
+  void initState() {
+    super.initState();
+    _spotifyCallbackListener = _maybeHandleSpotifyAuthCallback;
+    SpotifyAuthCallbackController.instance.latestCallback.addListener(
+      _spotifyCallbackListener,
+    );
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_dashboardInitialized) {
@@ -161,6 +179,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _showISS = data['iss'] ?? true;
           _showPlanes = data['planes'] ?? true;
           _showEarthquake = data['earthquake'] ?? true;
+          _showSpotify = data['spotify'] ?? true;
           _showTextBlast = data['textblast'] ?? true;
           _showDoodles = data['doodles'] ?? true;
           _brightness = (data['brightness'] ?? 128).toDouble();
@@ -173,8 +192,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _lngCtrl.text = (data['lng'] ?? -84.80).toString();
           _osUserCtrl.text = data['osUser'] ?? '';
           _osPassCtrl.text = data['osPass'] ?? '';
+          _spotifyRefreshTokenCtrl.text = data['spotifyRefreshToken'] ?? '';
           _isLoading = false;
         });
+        _maybeHandleSpotifyAuthCallback();
       } else {
         _showError("Failed to load panel settings: ${response.statusCode}");
       }
@@ -188,7 +209,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _saveSettings() async {
-    if (_panelIp == null) return;
+    await _saveSettingsInternal();
+  }
+
+  Future<bool> _saveSettingsInternal({
+    String successMessage = "Settings saved to panel!",
+  }) async {
+    if (_panelIp == null) return false;
 
     setState(() => _isSaving = true);
     try {
@@ -200,12 +227,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "iss": _showISS,
         "planes": _showPlanes,
         "earthquake": _showEarthquake,
+        "spotify": _showSpotify,
         "textblast": _showTextBlast,
         "doodles": _showDoodles,
         "lat": double.tryParse(_latCtrl.text) ?? 34.16,
         "lng": double.tryParse(_lngCtrl.text) ?? -84.80,
         "osUser": _osUserCtrl.text,
         "osPass": _osPassCtrl.text,
+        "spotifyClientId": "",
+        "spotifyClientSecret": "",
+        "spotifyRefreshToken": _spotifyRefreshTokenCtrl.text,
         "brightness": _brightness.toInt(),
         "nightMode": _nightMode,
         "nightStart": _nightStart,
@@ -220,14 +251,84 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
       if (response.statusCode == 200) {
-        _showSuccess("Settings saved to panel!");
-      } else {
-        _showError("Save failed: ${response.statusCode}");
+        if (successMessage.isNotEmpty) {
+          _showSuccess(successMessage);
+        }
+        return true;
       }
+
+      _showError("Save failed: ${response.statusCode}");
+      return false;
     } catch (e) {
       _showError("Network error while saving.");
+      return false;
+    } finally {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
     }
-    setState(() => _isSaving = false);
+  }
+
+  void _maybeHandleSpotifyAuthCallback() {
+    final callback =
+        SpotifyAuthCallbackController.instance.latestCallback.value;
+    if (callback == null || _panelIp == null || _isLoading) {
+      return;
+    }
+
+    final callbackUri = callback.uri.toString();
+    if (_lastHandledSpotifyCallbackUri == callbackUri) {
+      return;
+    }
+
+    _lastHandledSpotifyCallbackUri = callbackUri;
+    unawaited(_applySpotifyAuthCallback(callback));
+  }
+
+  Future<void> _applySpotifyAuthCallback(SpotifyAuthCallback callback) async {
+    if (mounted) {
+      setState(() {
+        _spotifyRefreshTokenCtrl.text = callback.refreshToken;
+        _isAuthorizingSpotify = false;
+      });
+    } else {
+      _spotifyRefreshTokenCtrl.text = callback.refreshToken;
+    }
+
+    final saved = await _saveSettingsInternal(
+      successMessage: 'Spotify connected and saved to panel.',
+    );
+
+    if (saved) {
+      SpotifyAuthCallbackController.instance.clearLatestCallback(callback.uri);
+    } else {
+      _lastHandledSpotifyCallbackUri = null;
+    }
+  }
+
+  Future<void> _launchSpotifyLogin() async {
+    final loginUri = Uri.parse('https://rgbop.com/login');
+
+    setState(() => _isAuthorizingSpotify = true);
+
+    try {
+      final launched = await launchUrl(
+        loginUri,
+        mode: LaunchMode.externalApplication,
+      );
+
+      if (!launched) {
+        if (mounted) {
+          setState(() => _isAuthorizingSpotify = false);
+        }
+        _showError('Could not open Spotify login.');
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isAuthorizingSpotify = false);
+      }
+      _showError('Could not open Spotify login.');
+    }
   }
 
   Future<void> _factoryResetPanel() async {
@@ -492,6 +593,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   title: const Text("Earthquake"),
                   value: _showEarthquake,
                   onChanged: (v) => setState(() => _showEarthquake = v),
+                ),
+                SwitchListTile(
+                  title: const Text("Spotify"),
+                  value: _showSpotify,
+                  onChanged: (v) => setState(() => _showSpotify = v),
                 ),
                 SwitchListTile(
                   title: const Text("Text Blast"),
@@ -823,6 +929,102 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
           const SizedBox(height: 32),
+          Card(
+            color: const Color(0xFF1E1E1E),
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  const Row(
+                    children: [
+                      Icon(Icons.music_note, color: Colors.greenAccent),
+                      SizedBox(width: 16),
+                      Text(
+                        "Spotify API",
+                        style: TextStyle(
+                          color: Colors.greenAccent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    _spotifyRefreshTokenCtrl.text.isEmpty
+                        ? "Connect Spotify in your browser to send a refresh token back to this app and save it to the panel."
+                        : "Spotify is connected for this panel. Reconnect if you want to replace the saved refresh token.",
+                    style: const TextStyle(color: Colors.white70, height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF141414),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _spotifyRefreshTokenCtrl.text.isEmpty
+                              ? Icons.link_off
+                              : Icons.check_circle,
+                          color: _spotifyRefreshTokenCtrl.text.isEmpty
+                              ? Colors.white54
+                              : Colors.greenAccent,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            _spotifyRefreshTokenCtrl.text.isEmpty
+                                ? "No Spotify refresh token saved"
+                                : "Refresh token saved to this panel",
+                            style: const TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.greenAccent,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: (_isAuthorizingSpotify || _isSaving)
+                          ? null
+                          : _launchSpotifyLogin,
+                      icon: _isAuthorizingSpotify
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : Icon(
+                              _spotifyRefreshTokenCtrl.text.isEmpty
+                                  ? Icons.open_in_browser
+                                  : Icons.sync,
+                            ),
+                      label: Text(
+                        _isAuthorizingSpotify
+                            ? "Waiting For Spotify..."
+                            : _spotifyRefreshTokenCtrl.text.isEmpty
+                            ? "Connect Spotify"
+                            : "Reconnect Spotify",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
 
           // --- DANGER ZONE ---
           ElevatedButton.icon(
@@ -848,5 +1050,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    SpotifyAuthCallbackController.instance.latestCallback.removeListener(
+      _spotifyCallbackListener,
+    );
+    _latCtrl.dispose();
+    _lngCtrl.dispose();
+    _osUserCtrl.dispose();
+    _osPassCtrl.dispose();
+    _spotifyRefreshTokenCtrl.dispose();
+    super.dispose();
   }
 }

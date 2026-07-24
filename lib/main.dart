@@ -3,9 +3,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'offline_studio_screen.dart';
 import 'setup_screen.dart';
 import 'dashboard_screen.dart';
+import 'spotify_auth_callback_controller.dart';
 import 'rgbop_mdns_service.dart'; // Add your mDNS service here
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await SpotifyAuthCallbackController.instance.init();
   runApp(const RGBopApp());
 }
 

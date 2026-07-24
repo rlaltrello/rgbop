@@ -9,6 +9,10 @@ import 'package:geolocator/geolocator.dart';
 import 'doodle_gallery.dart';
 import 'spotify_auth_callback_controller.dart';
 
+enum RadarTimeFormat { off, format12h, format24h }
+
+enum RadarUnitFormat { off, km, mi }
+
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -30,10 +34,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _showGifs = true;
   bool _showDate = true;
   bool _showWeather = true;
+  bool _showRadar = true;
   bool _showISS = true;
   bool _showPlanes = true;
   bool _showEarthquake = true;
   bool _showSpotify = true;
+  bool _showDiags = true;
   bool _showTextBlast = true;
   bool _showDoodles = true;
   double _brightness = 128;
@@ -42,6 +48,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _nightEnd = 6;
   bool _isFetchingLocation = false;
   int _transitionTime = 10;
+  RadarTimeFormat _radarTimeFormat = RadarTimeFormat.off;
+  RadarUnitFormat _radarUnitFormat = RadarUnitFormat.off;
+  int _radarZoomLevel = 7;
 
   final TextEditingController _latCtrl = TextEditingController();
   final TextEditingController _lngCtrl = TextEditingController();
@@ -56,6 +65,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (h == 0) return "12 AM";
     if (h == 12) return "12 PM";
     return h > 12 ? "${h - 12} PM" : "$h AM";
+  }
+
+  String _formatRadarTimeFormatLabel(RadarTimeFormat format) {
+    return switch (format) {
+      RadarTimeFormat.off => 'Off',
+      RadarTimeFormat.format12h => '12 Hour',
+      RadarTimeFormat.format24h => '24 Hour',
+    };
+  }
+
+  String _formatRadarUnitFormatLabel(RadarUnitFormat format) {
+    return switch (format) {
+      RadarUnitFormat.off => 'Off',
+      RadarUnitFormat.km => 'Kilometers',
+      RadarUnitFormat.mi => 'Miles',
+    };
+  }
+
+  String _formatRadarZoomLabel(int zoomLevel) {
+    return switch (zoomLevel) {
+      5 => '5 - ~160 miles (~260 km)',
+      6 => '6 - ~80 miles (~130 km)',
+      7 => '7 - ~40 miles (~65 km)',
+      _ => '7 - ~40 miles (~65 km)',
+    };
+  }
+
+  RadarTimeFormat _parseRadarTimeFormat(dynamic value) {
+    final raw = value?.toString();
+    return switch (raw) {
+      'FORMAT_12H' => RadarTimeFormat.format12h,
+      'FORMAT_24H' => RadarTimeFormat.format24h,
+      _ => RadarTimeFormat.off,
+    };
+  }
+
+  RadarUnitFormat _parseRadarUnitFormat(dynamic value) {
+    final raw = value?.toString();
+    return switch (raw) {
+      'KM' => RadarUnitFormat.km,
+      'MI' => RadarUnitFormat.mi,
+      _ => RadarUnitFormat.off,
+    };
+  }
+
+  String _serializeRadarTimeFormat(RadarTimeFormat format) {
+    return switch (format) {
+      RadarTimeFormat.off => 'OFF',
+      RadarTimeFormat.format12h => 'FORMAT_12H',
+      RadarTimeFormat.format24h => 'FORMAT_24H',
+    };
+  }
+
+  String _serializeRadarUnitFormat(RadarUnitFormat format) {
+    return switch (format) {
+      RadarUnitFormat.off => 'OFF',
+      RadarUnitFormat.km => 'KM',
+      RadarUnitFormat.mi => 'MI',
+    };
+  }
+
+  int _parseRadarZoomLevel(dynamic value) {
+    final parsed = int.tryParse(value?.toString() ?? '');
+    if (parsed != null && parsed >= 5 && parsed <= 7) {
+      return parsed;
+    }
+    return 7;
   }
 
   Future<void> _getCurrentLocation() async {
@@ -176,10 +252,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _showClock = data['clock'] ?? true;
           _showDate = data['date'] ?? true;
           _showWeather = data['weather'] ?? true;
+          _showRadar = data['radar'] ?? true;
+          _radarTimeFormat = _parseRadarTimeFormat(data['radarTimeFormat']);
+          _radarUnitFormat = _parseRadarUnitFormat(data['radarUnitFormat']);
+          _radarZoomLevel = _parseRadarZoomLevel(data['radarZoomLevel']);
           _showISS = data['iss'] ?? true;
           _showPlanes = data['planes'] ?? true;
           _showEarthquake = data['earthquake'] ?? true;
           _showSpotify = data['spotify'] ?? true;
+          _showDiags = data['diags'] ?? true;
           _showTextBlast = data['textblast'] ?? true;
           _showDoodles = data['doodles'] ?? true;
           _brightness = (data['brightness'] ?? 128).toDouble();
@@ -224,10 +305,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "clock": _showClock,
         "date": _showDate,
         "weather": _showWeather,
+        "radar": _showRadar,
+        "radarTimeFormat": _serializeRadarTimeFormat(_radarTimeFormat),
+        "radarUnitFormat": _serializeRadarUnitFormat(_radarUnitFormat),
+        "radarZoomLevel": _radarZoomLevel,
         "iss": _showISS,
         "planes": _showPlanes,
         "earthquake": _showEarthquake,
         "spotify": _showSpotify,
+        "diags": _showDiags,
         "textblast": _showTextBlast,
         "doodles": _showDoodles,
         "lat": double.tryParse(_latCtrl.text) ?? 34.16,
@@ -560,6 +646,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   leading: Icon(Icons.dashboard, color: Colors.blueAccent),
                 ),
                 SwitchListTile(
+                  title: const Text("Diagnostics"),
+                  value: _showDiags,
+                  onChanged: (v) => setState(() => _showDiags = v),
+                ),
+                SwitchListTile(
                   title: const Text("GIFs"),
                   value: _showGifs,
                   onChanged: (v) => setState(() => _showGifs = v),
@@ -579,6 +670,125 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   value: _showWeather,
                   onChanged: (v) => setState(() => _showWeather = v),
                 ),
+                SwitchListTile(
+                  title: const Text("Radar"),
+                  value: _showRadar,
+                  onChanged: (v) => setState(() => _showRadar = v),
+                ),
+                if (_showRadar) ...[
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 16.0),
+                    child: Divider(color: Colors.white24),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          "Radar Settings",
+                          style: TextStyle(
+                            color: Colors.blueAccent,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<RadarTimeFormat>(
+                          initialValue: _radarTimeFormat,
+                          decoration: const InputDecoration(
+                            labelText: "Radar Time Format",
+                            border: OutlineInputBorder(),
+                          ),
+                          dropdownColor: const Color(0xFF2A2A2A),
+                          items: RadarTimeFormat.values
+                              .map(
+                                (format) => DropdownMenuItem(
+                                  value: format,
+                                  child: Text(
+                                    _formatRadarTimeFormatLabel(format),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _radarTimeFormat = value);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<RadarUnitFormat>(
+                          initialValue: _radarUnitFormat,
+                          decoration: const InputDecoration(
+                            labelText: "Radar Unit Format",
+                            border: OutlineInputBorder(),
+                          ),
+                          dropdownColor: const Color(0xFF2A2A2A),
+                          items: RadarUnitFormat.values
+                              .map(
+                                (format) => DropdownMenuItem(
+                                  value: format,
+                                  child: Text(
+                                    _formatRadarUnitFormatLabel(format),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _radarUnitFormat = value);
+                            }
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        DropdownButtonFormField<int>(
+                          initialValue: _radarZoomLevel,
+                          decoration: const InputDecoration(
+                            labelText: "Radar Zoom Level",
+                            border: OutlineInputBorder(),
+                          ),
+                          isExpanded: true,
+                          dropdownColor: const Color(0xFF2A2A2A),
+                          selectedItemBuilder: (context) {
+                            return [5, 6, 7]
+                                .map(
+                                  (zoomLevel) => Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: Text(
+                                      _formatRadarZoomLabel(zoomLevel),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ),
+                                )
+                                .toList();
+                          },
+                          items: [5, 6, 7]
+                              .map(
+                                (zoomLevel) => DropdownMenuItem(
+                                  value: zoomLevel,
+                                  child: Text(
+                                    _formatRadarZoomLabel(zoomLevel),
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              )
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) {
+                              setState(() => _radarZoomLevel = value);
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
                 SwitchListTile(
                   title: const Text("ISS Tracker"),
                   value: _showISS,

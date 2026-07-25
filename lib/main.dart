@@ -76,6 +76,9 @@ class _BootRouterState extends State<BootRouter> {
   Future<void> _loadRecentHosts() async {
     final prefs = await SharedPreferences.getInstance();
     final saved = prefs.getStringList(_recentHostsKey) ?? const [];
+    for (final host in saved) {
+      _mdnsService.addDiscoveryHint(host);
+    }
     if (!mounted) return;
     setState(() {
       _recentHosts = saved;
@@ -85,6 +88,7 @@ class _BootRouterState extends State<BootRouter> {
   Future<void> _rememberHost(String hostOrIp) async {
     final value = hostOrIp.trim();
     if (value.isEmpty) return;
+    _mdnsService.addDiscoveryHint(value);
 
     final current = _recentHosts
         .where((h) => h.toLowerCase() != value.toLowerCase())

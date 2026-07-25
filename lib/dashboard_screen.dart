@@ -23,6 +23,7 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final RGBopMdnsService _mdnsService = RGBopMdnsService();
   String? _panelIp;
+  String _panelName = 'RGBop Panel';
   bool _isLoading = true;
   bool _connectionFailed = false;
   bool _isSaving = false;
@@ -132,6 +133,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return parsed;
     }
     return 7;
+  }
+
+  Future<void> _showPanelNameEditor() async {
+    final ctrl = TextEditingController(text: _panelName);
+
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: const Color(0xFF1E1E1E),
+          title: const Text(
+            'Panel Name',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: TextField(
+            controller: ctrl,
+            autofocus: true,
+            maxLength: 40,
+            decoration: const InputDecoration(
+              labelText: 'Name',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(context).pop(ctrl.text.trim()),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (!mounted ||
+        newName == null ||
+        newName.isEmpty ||
+        newName == _panelName) {
+      return;
+    }
+
+    final previous = _panelName;
+    setState(() => _panelName = newName);
+
+    final saved = await _saveSettingsInternal(
+      successMessage: 'Panel name saved.',
+    );
+    if (!saved && mounted) {
+      setState(() => _panelName = previous);
+    }
   }
 
   Future<void> _getCurrentLocation() async {
@@ -248,6 +302,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         setState(() {
+          _panelName = (data['panelName'] ?? data['name'] ?? _panelName)
+              .toString()
+              .trim();
+          if (_panelName.isEmpty) {
+            _panelName = 'RGBop Panel';
+          }
           _showGifs = data['gifs'] ?? true;
           _showClock = data['clock'] ?? true;
           _showDate = data['date'] ?? true;
@@ -301,6 +361,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     setState(() => _isSaving = true);
     try {
       final body = jsonEncode({
+        "panelName": _panelName,
         "gifs": _showGifs,
         "clock": _showClock,
         "date": _showDate,
@@ -612,19 +673,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // --- PANEL IP HEADER ---
           Padding(
             padding: const EdgeInsets.only(bottom: 16.0, top: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const Icon(Icons.wifi, color: Colors.grey, size: 16),
-                const SizedBox(width: 8),
-                Text(
-                  "Panel IP = $_panelIp",
-                  style: const TextStyle(
-                    color: Colors.grey,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 1.1,
+                InkWell(
+                  onTap: _showPanelNameEditor,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 6,
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          _panelName,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        const Icon(Icons.edit, color: Colors.white54, size: 16),
+                      ],
+                    ),
                   ),
+                ),
+                const SizedBox(height: 6),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.wifi, color: Colors.grey, size: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      "Panel IP = $_panelIp",
+                      style: const TextStyle(
+                        color: Colors.grey,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                        letterSpacing: 1.1,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),

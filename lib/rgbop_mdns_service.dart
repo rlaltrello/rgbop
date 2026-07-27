@@ -219,11 +219,12 @@ class RGBopMdnsService {
                 final isAlive = await _verifyPanelAlive(ip);
                 if (!isAlive) continue;
 
-                final friendly = _friendlyNameFromHost(targetHost);
+                final friendlyHost = _friendlyNameFromHost(targetHost);
+                final settingsName = await _readPanelNameFromSettings(ip);
                 byIp[ip] = RGBopPanel(
                   ip: ip,
                   hostname: targetHost,
-                  displayName: friendly,
+                  displayName: settingsName ?? friendlyHost,
                 );
               }
             }
@@ -311,7 +312,9 @@ class RGBopMdnsService {
       byIp[resolved.ip] = RGBopPanel(
         ip: resolved.ip,
         hostname: resolved.hostname,
-        displayName: _friendlyNameFromHost(resolved.hostname),
+        displayName:
+            await _readPanelNameFromSettings(resolved.ip) ??
+            _friendlyNameFromHost(resolved.hostname),
       );
     }
 
@@ -436,10 +439,37 @@ class RGBopMdnsService {
       }
 
       addDiscoveryHint(ip);
-      return RGBopPanel(ip: ip, hostname: ip, displayName: 'rgbop-$ip');
+      final panelName = _parsePanelNameFromSettings(decoded);
+      return RGBopPanel(
+        ip: ip,
+        hostname: ip,
+        displayName: panelName ?? 'rgbop-$ip',
+      );
     } catch (_) {
       return null;
     }
+  }
+
+  Future<String?> _readPanelNameFromSettings(String ip) async {
+    try {
+      final response = await http
+          .get(Uri.parse('http://$ip/api/settings'))
+          .timeout(const Duration(milliseconds: 700));
+      if (response.statusCode != 200) return null;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) return null;
+      return _parsePanelNameFromSettings(decoded);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  String? _parsePanelNameFromSettings(Map<String, dynamic> data) {
+    final raw = data['panelName'] ?? data['name'];
+    if (raw == null) return null;
+    final name = raw.toString().trim();
+    if (name.isEmpty) return null;
+    return name;
   }
 
   Future<List<RGBopPanel>> _discoverPanelsViaIosFallback() async {

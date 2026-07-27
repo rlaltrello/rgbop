@@ -5,6 +5,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'dart:convert';
 import 'rgbop_mdns_service.dart';
 import 'gif_manager_screen.dart';
+import 'game_controller_screen.dart';
 import 'package:geolocator/geolocator.dart';
 import 'doodle_gallery.dart';
 import 'spotify_auth_callback_controller.dart';
@@ -1101,6 +1102,44 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (context) => DoodleGallery(panelIp: _panelIp),
+                  ),
+                );
+              },
+            ),
+          ),
+          const SizedBox(height: 16),
+
+          // --- GAME MODE ---
+          Card(
+            color: const Color(0xFF1E1E1E),
+            child: ListTile(
+              leading: const Icon(
+                Icons.sports_esports,
+                color: Colors.orangeAccent,
+              ),
+              title: const Text(
+                "Game Mode",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              subtitle: const Text("Directional controls and fire button"),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () {
+                FocusScope.of(context).unfocus();
+                if (_panelIp == null || _panelIp!.isEmpty) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text(
+                        'No panel selected. Return to picker and reconnect.',
+                      ),
+                    ),
+                  );
+                  return;
+                }
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) =>
+                        GameControllerScreen(panelIp: _panelIp!),
                   ),
                 );
               },

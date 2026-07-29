@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:url_launcher/url_launcher.dart';
+import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'dart:convert';
 import 'rgbop_mdns_service.dart';
 import 'gif_manager_screen.dart';
@@ -41,8 +42,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _showPlanes = true;
   bool _showEarthquake = true;
   bool _showSpotify = true;
+  bool _spotifyShowOnPause = true;
   bool _showDiags = true;
   bool _showTextBlast = true;
+  int _textBlastTextScale = 1;
+  bool _textBlastTextCustomMessage = false;
+  late final TextEditingController _textBlastCtrl;
+  int _textBlastTextColor = 0x00FFFF00;
+  int _textBlastBackgroundColor = 0x00000000;
+  int _textBlastCycles = 1;
+  double _textBlastSpeed = 40.0;
   bool _showDoodles = true;
   double _brightness = 128;
   bool _nightMode = false;
@@ -77,13 +86,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
   }
 
-  String _formatRadarUnitFormatLabel(RadarUnitFormat format) {
-    return switch (format) {
-      RadarUnitFormat.off => 'Off',
-      RadarUnitFormat.km => 'Kilometers',
-      RadarUnitFormat.mi => 'Miles',
-    };
-  }
+String _formatRadarUnitFormatLabel(RadarUnitFormat format) {
+  return switch (format) {
+    RadarUnitFormat.off => 'Off',
+    RadarUnitFormat.km => 'Kilometers',
+    RadarUnitFormat.mi => 'Miles',
+  };
+}
 
   String _formatRadarZoomLabel(int zoomLevel) {
     return switch (zoomLevel) {
@@ -120,13 +129,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
   }
 
-  String _serializeRadarUnitFormat(RadarUnitFormat format) {
-    return switch (format) {
-      RadarUnitFormat.off => 'OFF',
-      RadarUnitFormat.km => 'KM',
-      RadarUnitFormat.mi => 'MI',
-    };
-  }
+String _serializeRadarUnitFormat(RadarUnitFormat format) {
+  return switch (format) {
+    RadarUnitFormat.off => 'OFF',
+    RadarUnitFormat.km => 'KM',
+    RadarUnitFormat.mi => 'MI',
+  };
+}
 
   int _parseRadarZoomLevel(dynamic value) {
     final parsed = int.tryParse(value?.toString() ?? '');
@@ -212,7 +221,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         );
       }
 
-      // FIX: Use the new locationSettings parameter instead of the deprecated desiredAccuracy
       Position position = await Geolocator.getCurrentPosition(
         locationSettings: const LocationSettings(
           accuracy: LocationAccuracy.high,
@@ -220,12 +228,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       );
 
       setState(() {
-        // FIX: Match your specific TextEditingController names
         _latCtrl.text = position.latitude.toStringAsFixed(4);
         _lngCtrl.text = position.longitude.toStringAsFixed(4);
       });
     } catch (e) {
-      // FIX: Add the mounted check before using context across an async gap
       if (!mounted) return;
 
       ScaffoldMessenger.of(context).showSnackBar(
@@ -249,6 +255,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _textBlastCtrl = TextEditingController();
     _spotifyCallbackListener = _maybeHandleSpotifyAuthCallback;
     SpotifyAuthCallbackController.instance.latestCallback.addListener(
       _spotifyCallbackListener,
@@ -265,7 +272,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _initDashboard() async {
-    // 1. Use the IP passed from BootRouter if available, otherwise re-discover.
     final routeIp = ModalRoute.of(context)?.settings.arguments as String?;
     String? ip = routeIp;
 
@@ -321,8 +327,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _showPlanes = data['planes'] ?? true;
           _showEarthquake = data['earthquake'] ?? true;
           _showSpotify = data['spotify'] ?? true;
+          _spotifyShowOnPause = data['spotifyShowOnPause'] ?? true;
           _showDiags = data['diags'] ?? true;
           _showTextBlast = data['textblast'] ?? true;
+          _textBlastTextScale = data['textBlastTextScale'] ?? 1;
+          _textBlastCtrl.text = data['textBlastText'] ?? '';
+          _textBlastTextColor = data['textBlastTextColor'] ?? 0x00FFFF00;
+          _textBlastBackgroundColor = data['textBlastBackgroundColor'] ?? 0x00000000;
+          _textBlastTextCustomMessage = data['textBlastTextCustomMessage'] ?? false;
+          _textBlastCycles = data['textBlastCycles'] ?? 1;
+          _textBlastSpeed = (data['textBlastSpeed'] ?? 40.0).toDouble();
           _showDoodles = data['doodles'] ?? true;
           _brightness = (data['brightness'] ?? 128).toDouble();
           _nightMode = data['nightMode'] ?? false;
@@ -375,8 +389,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "planes": _showPlanes,
         "earthquake": _showEarthquake,
         "spotify": _showSpotify,
+        "spotifyShowOnPause": _spotifyShowOnPause,
         "diags": _showDiags,
         "textblast": _showTextBlast,
+        "textBlastTextScale": _textBlastTextScale,
+        "textBlastText": _textBlastCtrl.text,
+        "textBlastTextColor": _textBlastTextColor,
+        "textBlastBackgroundColor": _textBlastBackgroundColor,
+        "textBlastTextCustomMessage": _textBlastTextCustomMessage,
+        "textBlastCycles": _textBlastCycles,
+        "textBlastSpeed": _textBlastSpeed,
         "doodles": _showDoodles,
         "lat": double.tryParse(_latCtrl.text) ?? 34.16,
         "lng": double.tryParse(_lngCtrl.text) ?? -84.80,
@@ -500,7 +522,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _confirmFactoryReset() async {
     return showDialog<void>(
       context: context,
-      barrierDismissible: false, // Forces the user to explicitly tap a button
+      barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
           backgroundColor: const Color(0xFF1E1E1E),
@@ -518,8 +540,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           actions: [
             TextButton(
               child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
-              onPressed: () =>
-                  Navigator.of(context).pop(), // Just close the dialog
+              onPressed: () => Navigator.of(context).pop(),
             ),
             TextButton(
               style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
@@ -528,8 +549,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               onPressed: () {
-                Navigator.of(context).pop(); // Close the dialog first
-                _factoryResetPanel(); // Then execute the actual reset
+                Navigator.of(context).pop();
+                _factoryResetPanel();
               },
             ),
           ],
@@ -552,6 +573,43 @@ class _DashboardScreenState extends State<DashboardScreen> {
         SnackBar(content: Text(message), backgroundColor: Colors.green),
       );
     }
+  }
+
+  void _openColorPickerDialog(
+    BuildContext context, {
+    required String title,
+    required Color initialColor,
+    required ValueChanged<Color> onColorSelected,
+  }) {
+    Color pickedColor = initialColor;
+
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: Text(title),
+          content: SingleChildScrollView(
+            child: BlockPicker(
+              pickerColor: initialColor,
+              onColorChanged: (color) => pickedColor = color,
+            ),
+          ),
+          actions: [
+            TextButton(
+              child: const Text("Cancel"),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            TextButton(
+              child: const Text("Select"),
+              onPressed: () {
+                onColorSelected(pickedColor);
+                Navigator.of(context).pop();
+              },
+            ),
+          ],
+        );
+      },
+    );
   }
 
   @override
@@ -666,8 +724,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
         ],
       ),
-
-      // 1. ADD THE GESTURE DETECTOR HERE TO FIX THE KEYBOARD
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -768,120 +824,130 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   value: _showRadar,
                   onChanged: (v) => setState(() => _showRadar = v),
                 ),
-                if (_showRadar) ...[
-                  const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 16.0),
-                    child: Divider(color: Colors.white24),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
+                if (_showRadar)
+                  Theme(
+                    data: Theme.of(
+                      context,
+                    ).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      initiallyExpanded: false,
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      backgroundColor: Colors.black.withValues(alpha: 0.2),
+                      title: const Padding(
+                        padding: EdgeInsets.only(left: 12.0),
+                        child: Text(
                           "Radar Settings",
                           style: TextStyle(
                             color: Colors.blueAccent,
+                            fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<RadarTimeFormat>(
-                          initialValue: _radarTimeFormat,
-                          decoration: const InputDecoration(
-                            labelText: "Radar Time Format",
-                            border: OutlineInputBorder(),
-                          ),
-                          dropdownColor: const Color(0xFF2A2A2A),
-                          items: RadarTimeFormat.values
-                              .map(
-                                (format) => DropdownMenuItem(
-                                  value: format,
-                                  child: Text(
-                                    _formatRadarTimeFormatLabel(format),
-                                  ),
+                      ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              DropdownButtonFormField<RadarTimeFormat>(
+                                initialValue: _radarTimeFormat,
+                                decoration: const InputDecoration(
+                                  labelText: "Radar Time Format",
+                                  border: OutlineInputBorder(),
                                 ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() => _radarTimeFormat = value);
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<RadarUnitFormat>(
-                          initialValue: _radarUnitFormat,
-                          decoration: const InputDecoration(
-                            labelText: "Radar Unit Format",
-                            border: OutlineInputBorder(),
-                          ),
-                          dropdownColor: const Color(0xFF2A2A2A),
-                          items: RadarUnitFormat.values
-                              .map(
-                                (format) => DropdownMenuItem(
-                                  value: format,
-                                  child: Text(
-                                    _formatRadarUnitFormatLabel(format),
-                                  ),
-                                ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() => _radarUnitFormat = value);
-                            }
-                          },
-                        ),
-                        const SizedBox(height: 12),
-                        DropdownButtonFormField<int>(
-                          initialValue: _radarZoomLevel,
-                          decoration: const InputDecoration(
-                            labelText: "Radar Zoom Level",
-                            border: OutlineInputBorder(),
-                          ),
-                          isExpanded: true,
-                          dropdownColor: const Color(0xFF2A2A2A),
-                          selectedItemBuilder: (context) {
-                            return [5, 6, 7]
-                                .map(
-                                  (zoomLevel) => Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Text(
-                                      _formatRadarZoomLabel(zoomLevel),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w600,
+                                dropdownColor: const Color(0xFF2A2A2A),
+                                items: RadarTimeFormat.values
+                                    .map(
+                                      (format) => DropdownMenuItem(
+                                        value: format,
+                                        child: Text(
+                                          _formatRadarTimeFormatLabel(format),
+                                        ),
                                       ),
-                                    ),
-                                  ),
-                                )
-                                .toList();
-                          },
-                          items: [5, 6, 7]
-                              .map(
-                                (zoomLevel) => DropdownMenuItem(
-                                  value: zoomLevel,
-                                  child: Text(
-                                    _formatRadarZoomLabel(zoomLevel),
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() => _radarTimeFormat = value);
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              DropdownButtonFormField<RadarUnitFormat>(
+                                initialValue: _radarUnitFormat,
+                                decoration: const InputDecoration(
+                                  labelText: "Radar Unit Format",
+                                  border: OutlineInputBorder(),
                                 ),
-                              )
-                              .toList(),
-                          onChanged: (value) {
-                            if (value != null) {
-                              setState(() => _radarZoomLevel = value);
-                            }
-                          },
+                                dropdownColor: const Color(0xFF2A2A2A),
+                                items: RadarUnitFormat.values
+                                    .map(
+                                      (format) => DropdownMenuItem(
+                                        value: format,
+                                        child: Text(
+                                          _formatRadarUnitFormatLabel(format),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() => _radarUnitFormat = value);
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              DropdownButtonFormField<int>(
+                                initialValue: _radarZoomLevel,
+                                decoration: const InputDecoration(
+                                  labelText: "Radar Zoom Level",
+                                  border: OutlineInputBorder(),
+                                ),
+                                isExpanded: true,
+                                dropdownColor: const Color(0xFF2A2A2A),
+                                selectedItemBuilder: (context) {
+                                  return [5, 6, 7]
+                                      .map(
+                                        (zoomLevel) => Align(
+                                          alignment: Alignment.centerLeft,
+                                          child: Text(
+                                            _formatRadarZoomLabel(zoomLevel),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: const TextStyle(
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                        ),
+                                      )
+                                      .toList();
+                                },
+                                items: [5, 6, 7]
+                                    .map(
+                                      (zoomLevel) => DropdownMenuItem(
+                                        value: zoomLevel,
+                                        child: Text(
+                                          _formatRadarZoomLabel(zoomLevel),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() => _radarZoomLevel = value);
+                                  }
+                                },
+                              ),
+                            ],
+                          ),
                         ),
                       ],
                     ),
                   ),
-                ],
                 SwitchListTile(
                   title: const Text("ISS Tracker"),
                   value: _showISS,
@@ -902,11 +968,317 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   value: _showSpotify,
                   onChanged: (v) => setState(() => _showSpotify = v),
                 ),
+                if (_showSpotify)
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: const Color.fromARGB(0, 111, 49, 49),
+                    ),
+                    child: ExpansionTile(
+                      initiallyExpanded: false,
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      backgroundColor: Colors.black.withValues(alpha: 0.2),
+                      collapsedBackgroundColor: Colors.transparent,
+                      title: const Padding(
+                        padding: EdgeInsets.only(left: 12.0),
+                        child: Text(
+                          "Spotify Settings",
+                          style: TextStyle(
+                            color: Colors.blueAccent,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Theme(
+                                data: Theme.of(context).copyWith(
+                                  switchTheme: SwitchThemeData(
+                                    thumbColor:
+                                        WidgetStateProperty.resolveWith<Color>((
+                                          states,
+                                        ) {
+                                          if (states.contains(
+                                            WidgetState.selected,
+                                          )) {
+                                            return const Color(0xFF1DB954);
+                                          }
+                                          return Colors.grey;
+                                        }),
+                                    trackColor:
+                                        WidgetStateProperty.resolveWith<Color>((
+                                          states,
+                                        ) {
+                                          if (states.contains(
+                                            WidgetState.selected,
+                                          )) {
+                                            return const Color(
+                                              0xFF1DB954,
+                                            ).withValues(alpha: 0.5);
+                                          }
+                                          return Colors.grey.withValues(
+                                            alpha: 0.3,
+                                          );
+                                        }),
+                                  ),
+                                ),
+                                child: SwitchListTile(
+                                  title: const Text("Show Spotify on Pause"),
+                                  value: _spotifyShowOnPause,
+                                  onChanged: (v) =>
+                                      setState(() => _spotifyShowOnPause = v),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 SwitchListTile(
                   title: const Text("Text Blast"),
                   value: _showTextBlast,
                   onChanged: (v) => setState(() => _showTextBlast = v),
                 ),
+                if (_showTextBlast)
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: const Color.fromARGB(0, 111, 49, 49),
+                    ),
+                    child: ExpansionTile(
+                      initiallyExpanded: false,
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      backgroundColor: Colors.black.withValues(alpha: 0.2),
+                      collapsedBackgroundColor: Colors.transparent,
+                      title: const Padding(
+                        padding: EdgeInsets.only(left: 12.0),
+                        child: Text(
+                          "Text Blast Settings",
+                          style: TextStyle(
+                            color: Colors.blueAccent,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Theme(
+                                data: Theme.of(context).copyWith(
+                                  switchTheme: SwitchThemeData(
+                                    thumbColor:
+                                        WidgetStateProperty.resolveWith<Color>((
+                                          states,
+                                        ) {
+                                          if (states.contains(
+                                            WidgetState.selected,
+                                          )) {
+                                            return const Color(0xFF1DB954);
+                                          }
+                                          return Colors.grey;
+                                        }),
+                                    trackColor:
+                                        WidgetStateProperty.resolveWith<Color>((
+                                          states,
+                                        ) {
+                                          if (states.contains(
+                                            WidgetState.selected,
+                                          )) {
+                                            return const Color(
+                                              0xFF1DB954,
+                                            ).withValues(alpha: 0.5);
+                                          }
+                                          return Colors.grey.withValues(
+                                            alpha: 0.3,
+                                          );
+                                        }),
+                                  ),
+                                ),
+                                child: SwitchListTile(
+                                  title: const Text("Custom Message"),
+                                  value: _textBlastTextCustomMessage,
+                                  onChanged: (v) => setState(
+                                    () => _textBlastTextCustomMessage = v,
+                                  ),
+                                ),
+                              ),
+
+                              if (_textBlastTextCustomMessage) ...[
+                                const SizedBox(height: 12),
+                                TextField(
+                                  controller: _textBlastCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: "Custom Text",
+                                    border: OutlineInputBorder(),
+                                    isDense: true,
+                                  ),
+                                  onTapOutside: (_) =>
+                                      FocusScope.of(context).unfocus(),
+                                ),
+                              ],
+
+                              const SizedBox(height: 16),
+
+                              Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 100,
+                                    child: Text("Text Scale:"),
+                                  ),
+                                  Expanded(
+                                    child: Slider(
+                                      value: _textBlastTextScale.toDouble(),
+                                      min: 1,
+                                      max: 5,
+                                      divisions: 4,
+                                      label: "$_textBlastTextScale",
+                                      onChanged: (v) => setState(
+                                        () => _textBlastTextScale = v.toInt(),
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 30,
+                                    child: Text(
+                                      "$_textBlastTextScale",
+                                      textAlign: TextAlign.end,
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 100,
+                                    child: Text("Cycles:"),
+                                  ),
+                                  Expanded(
+                                    child: Slider(
+                                      value: _textBlastCycles.toDouble(),
+                                      min: 1,
+                                      max: 5,
+                                      divisions: 4,
+                                      label: "$_textBlastCycles",
+                                      onChanged: (v) => setState(
+                                        () => _textBlastCycles = v.toInt(),
+                                      ),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 30,
+                                    child: Text(
+                                      "$_textBlastCycles",
+                                      textAlign: TextAlign.end,
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              Row(
+                                children: [
+                                  const SizedBox(
+                                    width: 100,
+                                    child: Text("Speed:"),
+                                  ),
+                                  Expanded(
+                                    child: Slider(
+                                      value: _textBlastSpeed,
+                                      min: 10.0,
+                                      max: 100.0,
+                                      divisions: 18,
+                                      label: _textBlastSpeed.toStringAsFixed(0),
+                                      onChanged: (v) =>
+                                          setState(() => _textBlastSpeed = v),
+                                    ),
+                                  ),
+                                  SizedBox(
+                                    width: 30,
+                                    child: Text(
+                                      _textBlastSpeed.toStringAsFixed(0),
+                                      textAlign: TextAlign.end,
+                                    ),
+                                  ),
+                                ],
+                              ),
+
+                              const Divider(color: Colors.white24),
+
+                              ListTile(
+                                title: const Text("Text Color"),
+                                trailing: Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: Color(
+                                      _textBlastTextColor | 0xFF000000,
+                                    ),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white30,
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                                onTap: () => _openColorPickerDialog(
+                                  context,
+                                  title: "Pick Text Color",
+                                  initialColor: Color(
+                                    _textBlastTextColor | 0xFF000000,
+                                  ),
+                                  onColorSelected: (color) {
+                                    setState(() {
+                                      _textBlastTextColor =
+                                          color.toARGB32() & 0x00FFFFFF;
+                                    });
+                                  },
+                                ),
+                              ),
+
+                              ListTile(
+                                title: const Text("Background Color"),
+                                trailing: Container(
+                                  width: 32,
+                                  height: 32,
+                                  decoration: BoxDecoration(
+                                    color: Color(
+                                      _textBlastBackgroundColor | 0xFF000000,
+                                    ),
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: Colors.white30,
+                                      width: 2,
+                                    ),
+                                  ),
+                                ),
+                                onTap: () => _openColorPickerDialog(
+                                  context,
+                                  title: "Pick Background Color",
+                                  initialColor: Color(
+                                    _textBlastBackgroundColor | 0xFF000000,
+                                  ),
+                                  onColorSelected: (color) {
+                                    setState(() {
+                                      _textBlastBackgroundColor =
+                                          color.toARGB32() & 0x00FFFFFF;
+                                    });
+                                  },
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 SwitchListTile(
                   title: const Text("Doodles"),
                   value: _showDoodles,
@@ -945,8 +1317,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ),
                           ),
                           SizedBox(
-                            width:
-                                40, // Fixed width prevents jumping as numbers change
+                            width: 40,
                             child: Text(
                               "${_transitionTime}s",
                               style: const TextStyle(
@@ -1169,8 +1540,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                   ),
                   const SizedBox(height: 16),
-
-                  // --- NEW LOCATION BUTTON ---
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -1398,6 +1767,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     SpotifyAuthCallbackController.instance.latestCallback.removeListener(
       _spotifyCallbackListener,
     );
+    _textBlastCtrl.dispose();
     _latCtrl.dispose();
     _lngCtrl.dispose();
     _osUserCtrl.dispose();

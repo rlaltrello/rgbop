@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
@@ -28,6 +29,9 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
   StreamSubscription<dynamic>? _socketSubscription;
   Timer? _repeatTimer;
 
+  // Selected game parameter
+  String _selectedGame = 'shooter'; // Default selection
+
   bool _isGameModeActive = false;
   bool _isConnecting = false;
   bool _isStopping = false;
@@ -46,7 +50,7 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
   int _lastButtonsSent = -1;
   DateTime? _lastFrameSentAt;
 
-  String _statusText = 'Tap Start to enter game mode.';
+  String _statusText = 'Select a game and tap Start.';
   Offset _joystickVisualOffset = Offset.zero;
   int? _joystickPointerId;
   bool _joystickRepaintQueued = false;
@@ -104,22 +108,25 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
 
     setState(() {
       _isConnecting = true;
-      _statusText = 'HTTP: Requesting Game Mode...';
+      _statusText = 'Starting ${_selectedGame.toUpperCase()}...';
     });
 
     _hardTeardownLocal();
 
-    // STEP 1: Send Start HTTP Request exclusively
+    // STEP 1: Send Start HTTP Request with selected game payload
     bool startSuccessful = false;
     final client = http.Client();
     try {
-      final response = await client.post(
-        Uri.parse('http://${widget.panelIp}/api/game/start'),
-        headers: const {
-          'Content-Type': 'application/json',
-          'Connection': 'close',
-        },
-      ).timeout(const Duration(seconds: 4));
+      final response = await client
+          .post(
+            Uri.parse('http://${widget.panelIp}/api/game/start'),
+            headers: const {
+              'Content-Type': 'application/json',
+              'Connection': 'close',
+            },
+            body: jsonEncode({'game': _selectedGame}),
+          )
+          .timeout(const Duration(seconds: 4));
 
       if (response.statusCode == 200) {
         startSuccessful = true;
@@ -176,6 +183,15 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
           });
         }
 
+        if (attempt > 5) {
+          setState(() {
+            _isGameModeActive = false;
+            _statusText = 'Game Mode exited by panel.';
+          });
+          _hardTeardownLocal();
+          return;
+        }
+
         try {
           final socket = await WebSocket.connect(
             'ws://${widget.panelIp}:81/',
@@ -201,7 +217,7 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
           setState(() {
             _webSocket = socket;
             _socketReconnectAttempt = 0;
-            _statusText = 'Connected. Ready to play!';
+            _statusText = 'Connected. Playing ${_selectedGame.toUpperCase()}!';
           });
 
           _sendInputFrame(force: true);
@@ -255,15 +271,12 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
 
     ++_lifecycleEpoch;
 
-    // 1. HARD LOCAL TEARDOWN FIRST (Identical to Back Button behavior)
     setState(() {
       _isStopping = true;
       _statusText = 'Stopping game mode...';
     });
 
     _hardTeardownLocal();
-
-    // 2. HTTP STOP NOTIFICATION TO ESP32
     await _sendStopRequestRemote();
 
     if (mounted) {
@@ -360,6 +373,30 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
     } else if (button == 'B') {
       changed = _bPressed != pressed;
       _bPressed = pressed;
+    }
+
+    if (changed) {
+      _sendInputFrame(force: true);
+      _queueJoystickRepaint();
+    }
+  }
+
+  void _setDpadButtonState(String direction, bool pressed) {
+    if (!_isGameModeActive || _isStopping) return;
+
+    var changed = false;
+    if (direction == 'UP') {
+      changed = _upPressed != pressed;
+      _upPressed = pressed;
+    } else if (direction == 'DOWN') {
+      changed = _downPressed != pressed;
+      _downPressed = pressed;
+    } else if (direction == 'LEFT') {
+      changed = _leftPressed != pressed;
+      _leftPressed = pressed;
+    } else if (direction == 'RIGHT') {
+      changed = _rightPressed != pressed;
+      _rightPressed = pressed;
     }
 
     if (changed) {
@@ -501,6 +538,83 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
     );
   }
 
+  Widget _buildDpadButton({
+    required IconData icon,
+    required String direction,
+    required bool pressed,
+  }) {
+    return Listener(
+      behavior: HitTestBehavior.opaque,
+      onPointerDown: (_) => _setDpadButtonState(direction, true),
+      onPointerUp: (_) => _setDpadButtonState(direction, false),
+      onPointerCancel: (_) => _setDpadButtonState(direction, false),
+      child: Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: pressed
+              ? Colors.blueGrey.withValues(alpha: 0.95)
+              : Colors.blueGrey.withValues(alpha: 0.55),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.8),
+            width: 2,
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Icon(icon, color: Colors.white, size: 28),
+      ),
+    );
+  }
+
+  Widget _buildDpadController() {
+    return SizedBox(
+      width: _joystickSize,
+      height: _joystickSize,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          // Up
+          Positioned(
+            top: 0,
+            child: _buildDpadButton(
+              icon: Icons.arrow_drop_up,
+              direction: 'UP',
+              pressed: _upPressed,
+            ),
+          ),
+          // Down
+          Positioned(
+            bottom: 0,
+            child: _buildDpadButton(
+              icon: Icons.arrow_drop_down,
+              direction: 'DOWN',
+              pressed: _downPressed,
+            ),
+          ),
+          // Left
+          Positioned(
+            left: 0,
+            child: _buildDpadButton(
+              icon: Icons.arrow_left,
+              direction: 'LEFT',
+              pressed: _leftPressed,
+            ),
+          ),
+          // Right
+          Positioned(
+            right: 0,
+            child: _buildDpadButton(
+              icon: Icons.arrow_right,
+              direction: 'RIGHT',
+              pressed: _rightPressed,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildActionButton({
     required String label,
     required bool pressed,
@@ -603,6 +717,32 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
               ),
             ),
             const SizedBox(height: 16),
+            
+            // --- GAME SELECTION SELECTOR ---
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment<String>(
+                  value: 'shooter',
+                  label: Text('Shooter'),
+                  icon: Icon(Icons.rocket_launch),
+                ),
+                ButtonSegment<String>(
+                  value: 'dungeon',
+                  label: Text('Dungeon 3D'),
+                  icon: Icon(Icons.castle),
+                ),
+              ],
+              selected: {_selectedGame},
+              onSelectionChanged: (_isConnecting || _isGameModeActive || _isStopping)
+                  ? null
+                  : (newSelection) {
+                      setState(() {
+                        _selectedGame = newSelection.first;
+                      });
+                    },
+            ),
+            const SizedBox(height: 16),
+
             Row(
               children: [
                 Expanded(
@@ -641,7 +781,10 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    _buildJoystick(),
+                    // Dynamic Controller Switch: D-pad for Dungeon 3D, Joystick for Shooter
+                    _selectedGame == 'dungeon'
+                        ? _buildDpadController()
+                        : _buildJoystick(),
                     Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [

@@ -86,13 +86,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
   }
 
-String _formatRadarUnitFormatLabel(RadarUnitFormat format) {
-  return switch (format) {
-    RadarUnitFormat.off => 'Off',
-    RadarUnitFormat.km => 'Kilometers',
-    RadarUnitFormat.mi => 'Miles',
-  };
-}
+  String _formatRadarUnitFormatLabel(RadarUnitFormat format) {
+    return switch (format) {
+      RadarUnitFormat.off => 'Off',
+      RadarUnitFormat.km => 'Kilometers',
+      RadarUnitFormat.mi => 'Miles',
+    };
+  }
 
   String _formatRadarZoomLabel(int zoomLevel) {
     return switch (zoomLevel) {
@@ -129,13 +129,13 @@ String _formatRadarUnitFormatLabel(RadarUnitFormat format) {
     };
   }
 
-String _serializeRadarUnitFormat(RadarUnitFormat format) {
-  return switch (format) {
-    RadarUnitFormat.off => 'OFF',
-    RadarUnitFormat.km => 'KM',
-    RadarUnitFormat.mi => 'MI',
-  };
-}
+  String _serializeRadarUnitFormat(RadarUnitFormat format) {
+    return switch (format) {
+      RadarUnitFormat.off => 'OFF',
+      RadarUnitFormat.km => 'KM',
+      RadarUnitFormat.mi => 'MI',
+    };
+  }
 
   int _parseRadarZoomLevel(dynamic value) {
     final parsed = int.tryParse(value?.toString() ?? '');
@@ -333,8 +333,10 @@ String _serializeRadarUnitFormat(RadarUnitFormat format) {
           _textBlastTextScale = data['textBlastTextScale'] ?? 1;
           _textBlastCtrl.text = data['textBlastText'] ?? '';
           _textBlastTextColor = data['textBlastTextColor'] ?? 0x00FFFF00;
-          _textBlastBackgroundColor = data['textBlastBackgroundColor'] ?? 0x00000000;
-          _textBlastTextCustomMessage = data['textBlastTextCustomMessage'] ?? false;
+          _textBlastBackgroundColor =
+              data['textBlastBackgroundColor'] ?? 0x00000000;
+          _textBlastTextCustomMessage =
+              data['textBlastTextCustomMessage'] ?? false;
           _textBlastCycles = data['textBlastCycles'] ?? 1;
           _textBlastSpeed = (data['textBlastSpeed'] ?? 40.0).toDouble();
           _showDoodles = data['doodles'] ?? true;
@@ -1601,16 +1603,51 @@ String _serializeRadarUnitFormat(RadarUnitFormat format) {
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  const Row(
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Icon(Icons.flight, color: Colors.blueAccent),
-                      SizedBox(width: 16),
-                      Text(
-                        "OpenSky API",
-                        style: TextStyle(
-                          color: Colors.blueAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
+                      const Row(
+                        children: [
+                          Icon(Icons.flight, color: Colors.blueAccent),
+                          SizedBox(width: 16),
+                          Text(
+                            "OpenSky API",
+                            style: TextStyle(
+                              color: Colors.blueAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ],
+                      ),
+                      TextButton.icon(
+                        onPressed: () async {
+                          final Uri url = Uri.parse(
+                            'https://openskynetwork.github.io/opensky-api/rest.html#authentication',
+                          );
+
+                          final messenger = ScaffoldMessenger.of(context);
+                          final launched = await launchUrl(
+                            url,
+                            mode: LaunchMode.externalApplication,
+                          );
+
+                          if (!launched) {
+                            messenger.showSnackBar(
+                              const SnackBar(
+                                content: Text('Cannot Launch URL.'),
+                              ),
+                            );
+                          }
+                        },
+                        icon: const Icon(
+                          Icons.open_in_new,
+                          size: 16,
+                          color: Colors.grey,
+                        ),
+                        label: const Text(
+                          "Get Credentials",
+                          style: TextStyle(color: Colors.grey, fontSize: 12),
                         ),
                       ),
                     ],

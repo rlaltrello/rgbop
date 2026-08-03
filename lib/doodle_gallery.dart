@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import 'doodle_editor.dart';
 import 'panel_storage_info.dart';
 import 'rgbop_mdns_service.dart';
+import 'app_palette.dart';
 
 class DoodleItem {
   final String filename;
@@ -30,11 +31,7 @@ class DoodleGallery extends StatefulWidget {
   final String? panelIp;
   final bool offlineMode;
 
-  const DoodleGallery({
-    super.key,
-    this.panelIp,
-    this.offlineMode = false,
-  });
+  const DoodleGallery({super.key, this.panelIp, this.offlineMode = false});
 
   @override
   State<DoodleGallery> createState() => _DoodleGalleryState();
@@ -288,7 +285,7 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                 ? const SizedBox.expand(key: ValueKey('empty-message'))
                 : Material(
                     key: const ValueKey('active-message'),
-                    color: const Color(0xFFE3DCE6),
+                    color: AppPalette.surfaceMessageLane,
                     borderRadius: BorderRadius.circular(12),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -302,7 +299,7 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Color(0xFF3F3845),
+                            color: AppPalette.onSurfaceMessageLane,
                             fontSize: 16,
                           ),
                         ),
@@ -318,17 +315,20 @@ class _DoodleGalleryState extends State<DoodleGallery> {
   Future<void> _confirmDeleteLocalDoodle(DoodleItem doodle) async {
     if (!doodle.isLocal) return;
 
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
+        backgroundColor: colorScheme.surfaceContainerHighest,
+        title: Text(
           'Delete Local Doodle?',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: colorScheme.onSurface),
         ),
-        content: const Text(
+        content: Text(
           'This removes it from local storage only. The panel copy (if any) remains until you press SYNC.',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.7)),
         ),
         actions: [
           TextButton(
@@ -339,7 +339,7 @@ class _DoodleGalleryState extends State<DoodleGallery> {
             onPressed: () => Navigator.pop(context, true),
             child: const Text(
               'Delete',
-              style: TextStyle(color: Colors.redAccent),
+              style: TextStyle(color: AppPalette.statusDanger),
             ),
           ),
         ],
@@ -399,17 +399,20 @@ class _DoodleGalleryState extends State<DoodleGallery> {
       return;
     }
 
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
+        backgroundColor: colorScheme.surfaceContainerHighest,
+        title: Text(
           'Sync Local Doodles?',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: colorScheme.onSurface),
         ),
-        content: const Text(
+        content: Text(
           'This will clear doodles on the panel, then upload all local doodles from this app.',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.7)),
         ),
         actions: [
           TextButton(
@@ -608,18 +611,22 @@ class _DoodleGalleryState extends State<DoodleGallery> {
       onTap: _createDoodle,
       child: Container(
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.blueAccent),
-          color: const Color(0xFF151515),
+          border: Border.all(color: AppPalette.brandAccent),
+          color: AppPalette.surfaceTile,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: const [
-            Icon(Icons.add_box_outlined, color: Colors.blueAccent, size: 42),
+            Icon(
+              Icons.add_box_outlined,
+              color: AppPalette.brandAccent,
+              size: 42,
+            ),
             SizedBox(height: 10),
             Text(
               'Add Doodle',
               style: TextStyle(
-                color: Colors.blueAccent,
+                color: AppPalette.brandAccent,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -631,8 +638,11 @@ class _DoodleGalleryState extends State<DoodleGallery> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.grey[900],
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(_isOffline ? 'My Doodles (Offline)' : 'My Doodles'),
         actions: [
@@ -662,7 +672,9 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                       children: [
                         Text(
                           _syncStatus,
-                          style: const TextStyle(color: Colors.white70),
+                          style: TextStyle(
+                            color: colorScheme.onSurface.withValues(alpha: 0.7),
+                          ),
                         ),
                         const SizedBox(height: 8),
                         LinearProgressIndicator(
@@ -701,9 +713,9 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                             final doodle = _doodles[index];
                             final borderColor = doodle.isLocal
                                 ? (doodle.isRemote
-                                      ? Colors.amber
-                                      : Colors.green)
-                                : Colors.blue;
+                                      ? AppPalette.statusWarning
+                                      : AppPalette.statusSuccess)
+                                : AppPalette.brandAccent;
 
                             return GestureDetector(
                               onTap: () => _openLocalEditor(doodle),
@@ -747,7 +759,7 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                                             vertical: 2,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.black54,
+                                            color: AppPalette.overlayScrim,
                                             borderRadius: BorderRadius.circular(
                                               4,
                                             ),
@@ -778,13 +790,13 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                                             child: Container(
                                               padding: const EdgeInsets.all(4),
                                               decoration: BoxDecoration(
-                                                color: Colors.black54,
+                                                color: AppPalette.overlayScrim,
                                                 borderRadius:
                                                     BorderRadius.circular(4),
                                               ),
                                               child: const Icon(
                                                 Icons.delete,
-                                                color: Colors.redAccent,
+                                                color: AppPalette.statusDanger,
                                                 size: 16,
                                               ),
                                             ),
@@ -802,13 +814,13 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                                             child: Container(
                                               padding: const EdgeInsets.all(4),
                                               decoration: BoxDecoration(
-                                                color: Colors.black54,
+                                                color: AppPalette.overlayScrim,
                                                 borderRadius:
                                                     BorderRadius.circular(4),
                                               ),
                                               child: const Icon(
                                                 Icons.download,
-                                                color: Colors.blueAccent,
+                                                color: AppPalette.brandAccent,
                                                 size: 16,
                                               ),
                                             ),

@@ -10,6 +10,7 @@ import 'package:http/http.dart' as http;
 import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 
+import 'app_palette.dart';
 import 'panel_storage_info.dart';
 
 enum _GifImportMode { preserveOriginal, fitTo64 }
@@ -447,17 +448,20 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
   Future<void> _confirmDeleteLocalGif(GifItem gif) async {
     if (!gif.isLocal) return;
 
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
+        backgroundColor: colorScheme.surfaceContainerHighest,
+        title: Text(
           'Delete Local GIF?',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: colorScheme.onSurface),
         ),
-        content: const Text(
+        content: Text(
           'This removes it from local storage only. The panel copy remains until you press SYNC.',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.7)),
         ),
         actions: [
           TextButton(
@@ -468,7 +472,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
             onPressed: () => Navigator.pop(context, true),
             child: const Text(
               'Delete',
-              style: TextStyle(color: Colors.redAccent),
+              style: TextStyle(color: AppPalette.statusDanger),
             ),
           ),
         ],
@@ -567,17 +571,20 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
       return;
     }
 
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1E1E1E),
-        title: const Text(
+        backgroundColor: colorScheme.surfaceContainerHighest,
+        title: Text(
           'Sync Local GIFs?',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: colorScheme.onSurface),
         ),
-        content: const Text(
+        content: Text(
           'This will clear GIFs on the panel, then upload all local GIFs from this app.',
-          style: TextStyle(color: Colors.white70),
+          style: TextStyle(color: colorScheme.onSurface.withValues(alpha: 0.7)),
         ),
         actions: [
           TextButton(
@@ -839,7 +846,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                 ? const SizedBox.expand(key: ValueKey('empty-message'))
                 : Material(
                     key: const ValueKey('active-message'),
-                    color: const Color(0xFFE3DCE6),
+                    color: AppPalette.surfaceMessageLane,
                     borderRadius: BorderRadius.circular(12),
                     child: Padding(
                       padding: const EdgeInsets.symmetric(
@@ -853,7 +860,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                           maxLines: 2,
                           overflow: TextOverflow.ellipsis,
                           style: const TextStyle(
-                            color: Color(0xFF3F3845),
+                            color: AppPalette.onSurfaceMessageLane,
                             fontSize: 16,
                           ),
                         ),
@@ -918,7 +925,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     return ClipRRect(
       borderRadius: BorderRadius.circular(4),
       child: ColoredBox(
-        color: const Color(0xFF111111),
+        color: AppPalette.surfacePanel.withValues(alpha: 0.5),
         child: Center(child: image),
       ),
     );
@@ -972,9 +979,9 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
   }
 
   Color _borderColor(GifItem gif) {
-    if (gif.isLocal && gif.isRemote) return Colors.amber;
-    if (gif.isLocal) return Colors.green;
-    return Colors.blue;
+    if (gif.isLocal && gif.isRemote) return AppPalette.statusWarning;
+    if (gif.isLocal) return AppPalette.statusSuccess;
+    return AppPalette.brandAccent;
   }
 
   String _stateLabel(GifItem gif) {
@@ -988,18 +995,22 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
       onTap: _addLocalGif,
       child: Container(
         decoration: BoxDecoration(
-          border: Border.all(color: Colors.blueAccent),
-          color: const Color(0xFF151515),
+          border: Border.all(color: AppPalette.brandAccent),
+          color: AppPalette.surfaceTile,
         ),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: const [
-            Icon(Icons.add_box_outlined, color: Colors.blueAccent, size: 42),
+            Icon(
+              Icons.add_box_outlined,
+              color: AppPalette.brandAccent,
+              size: 42,
+            ),
             SizedBox(height: 10),
             Text(
               'Add GIF',
               style: TextStyle(
-                color: Colors.blueAccent,
+                color: AppPalette.brandAccent,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -1011,8 +1022,11 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     return Scaffold(
-      backgroundColor: Colors.grey[900],
+      backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
         title: Text(_isOffline ? 'My GIFs (Offline)' : 'My GIFs'),
         actions: [
@@ -1051,7 +1065,9 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                       children: [
                         Text(
                           _syncStatus,
-                          style: const TextStyle(color: Colors.white70),
+                          style: TextStyle(
+                            color: colorScheme.onSurface.withValues(alpha: 0.7),
+                          ),
                         ),
                         const SizedBox(height: 8),
                         LinearProgressIndicator(
@@ -1099,6 +1115,8 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                                       width: constraints.maxWidth,
                                       height: constraints.maxHeight,
                                       decoration: BoxDecoration(
+                                        color: AppPalette.surfacePanel
+                                            .withValues(alpha: 0.35),
                                         border: Border.all(color: borderColor),
                                       ),
                                       child: Column(
@@ -1116,7 +1134,8 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                                             ),
                                           ),
                                           Container(
-                                            color: const Color(0xCC111111),
+                                            color: AppPalette.surfacePanel
+                                                .withValues(alpha: 0.78),
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 6,
                                               vertical: 6,
@@ -1132,7 +1151,8 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                                                   overflow:
                                                       TextOverflow.ellipsis,
                                                   style: TextStyle(
-                                                    color: Colors.white,
+                                                    color:
+                                                        colorScheme.onSurface,
                                                     fontWeight: FontWeight.bold,
                                                     decoration:
                                                         gif.isRemote &&
@@ -1167,7 +1187,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                                           vertical: 2,
                                         ),
                                         decoration: BoxDecoration(
-                                          color: Colors.black54,
+                                          color: AppPalette.overlayScrim,
                                           borderRadius: BorderRadius.circular(
                                             4,
                                           ),
@@ -1191,7 +1211,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                                           child: Container(
                                             padding: const EdgeInsets.all(4),
                                             decoration: BoxDecoration(
-                                              color: Colors.black54,
+                                              color: AppPalette.overlayScrim,
                                               borderRadius:
                                                   BorderRadius.circular(4),
                                             ),
@@ -1199,7 +1219,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                                               gif.remoteEnabled
                                                   ? Icons.visibility
                                                   : Icons.visibility_off,
-                                              color: Colors.blueAccent,
+                                              color: AppPalette.brandAccent,
                                               size: 16,
                                             ),
                                           ),
@@ -1215,13 +1235,13 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                                           child: Container(
                                             padding: const EdgeInsets.all(4),
                                             decoration: BoxDecoration(
-                                              color: Colors.black54,
+                                              color: AppPalette.overlayScrim,
                                               borderRadius:
                                                   BorderRadius.circular(4),
                                             ),
                                             child: const Icon(
                                               Icons.delete,
-                                              color: Colors.redAccent,
+                                              color: AppPalette.statusDanger,
                                               size: 16,
                                             ),
                                           ),
@@ -1238,13 +1258,13 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                                           child: Container(
                                             padding: const EdgeInsets.all(4),
                                             decoration: BoxDecoration(
-                                              color: Colors.black54,
+                                              color: AppPalette.overlayScrim,
                                               borderRadius:
                                                   BorderRadius.circular(4),
                                             ),
                                             child: const Icon(
                                               Icons.download,
-                                              color: Colors.blueAccent,
+                                              color: AppPalette.brandAccent,
                                               size: 16,
                                             ),
                                           ),

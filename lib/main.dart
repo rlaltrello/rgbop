@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'app_palette.dart';
 import 'offline_studio_screen.dart';
 import 'setup_screen.dart';
 import 'dashboard_screen.dart';
@@ -23,8 +24,26 @@ class RGBopApp extends StatelessWidget {
 
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF121212),
-        primaryColor: Colors.blueAccent,
+        scaffoldBackgroundColor: AppPalette.surfaceAppBackground,
+        primaryColor: AppPalette.brandPrimary,
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: AppPalette.brandAccent,
+          brightness: Brightness.dark,
+        ),
+        switchTheme: SwitchThemeData(
+          thumbColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppPalette.brandAccent;
+            }
+            return Colors.grey;
+          }),
+          trackColor: WidgetStateProperty.resolveWith((states) {
+            if (states.contains(WidgetState.selected)) {
+              return AppPalette.brandAccent.withValues(alpha: 0.45);
+            }
+            return Colors.grey.withValues(alpha: 0.3);
+          }),
+        ),
         appBarTheme: const AppBarTheme(
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -163,7 +182,7 @@ class _BootRouterState extends State<BootRouter> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Could not reach that host/IP. Check and try again.'),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: AppPalette.statusDanger,
           ),
         );
         return;
@@ -250,14 +269,17 @@ class _BootRouterState extends State<BootRouter> {
               width: double.infinity,
               child: OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.amber),
+                  side: const BorderSide(color: AppPalette.statusWarning),
                   padding: const EdgeInsets.symmetric(vertical: 14),
                 ),
                 onPressed: () => Navigator.pushNamed(context, '/offline'),
-                icon: const Icon(Icons.offline_bolt, color: Colors.amber),
+                icon: const Icon(
+                  Icons.offline_bolt,
+                  color: AppPalette.statusWarning,
+                ),
                 label: const Text(
                   'Work Offline (Local GIFs & Doodles)',
-                  style: TextStyle(color: Colors.amber),
+                  style: TextStyle(color: AppPalette.statusWarning),
                 ),
               ),
             ),
@@ -270,13 +292,13 @@ class _BootRouterState extends State<BootRouter> {
               const SizedBox(height: 8),
               ..._recentHosts.map(
                 (host) => Card(
-                  color: const Color(0xFF1A1A1A),
+                  color: AppPalette.surfacePanel,
                   margin: const EdgeInsets.only(bottom: 8),
                   child: ListTile(
                     dense: true,
                     leading: const Icon(
                       Icons.history,
-                      color: Colors.blueAccent,
+                      color: AppPalette.brandAccent,
                     ),
                     title: Text(host),
                     trailing: Row(
@@ -286,7 +308,7 @@ class _BootRouterState extends State<BootRouter> {
                           tooltip: 'Use this address',
                           icon: const Icon(
                             Icons.login,
-                            color: Colors.blueAccent,
+                            color: AppPalette.brandAccent,
                           ),
                           onPressed: _isManualConnecting
                               ? null
@@ -311,7 +333,9 @@ class _BootRouterState extends State<BootRouter> {
               const Center(
                 child: Padding(
                   padding: EdgeInsets.symmetric(vertical: 32),
-                  child: CircularProgressIndicator(color: Colors.blueAccent),
+                  child: CircularProgressIndicator(
+                    color: AppPalette.brandAccent,
+                  ),
                 ),
               ),
               const Center(
@@ -323,10 +347,13 @@ class _BootRouterState extends State<BootRouter> {
             ] else if (_panels.isNotEmpty) ...[
               ..._panels.map(
                 (panel) => Card(
-                  color: const Color(0xFF1E1E1E),
+                  color: AppPalette.surfacePanel,
                   margin: const EdgeInsets.only(bottom: 12),
                   child: ListTile(
-                    leading: const Icon(Icons.dns, color: Colors.blueAccent),
+                    leading: const Icon(
+                      Icons.dns,
+                      color: AppPalette.brandAccent,
+                    ),
                     title: Text(panel.displayName),
                     subtitle: Text('${panel.hostname}  |  ${panel.ip}'),
                     trailing: panel.isLegacyDiscovery
@@ -340,7 +367,11 @@ class _BootRouterState extends State<BootRouter> {
                 ),
               ),
             ] else ...[
-              const Icon(Icons.wifi_off, color: Colors.redAccent, size: 64),
+              const Icon(
+                Icons.wifi_off,
+                color: AppPalette.statusDanger,
+                size: 64,
+              ),
               const SizedBox(height: 16),
               const Text(
                 'No panels found yet.',
@@ -363,7 +394,7 @@ class _BootRouterState extends State<BootRouter> {
                 width: double.infinity,
                 child: ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
+                    backgroundColor: AppPalette.brandAccent,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
                   icon: const Icon(Icons.refresh, color: Colors.white),
@@ -379,13 +410,19 @@ class _BootRouterState extends State<BootRouter> {
                 width: double.infinity,
                 child: OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.blueAccent),
+                    side: const BorderSide(color: AppPalette.brandAccent),
                     padding: const EdgeInsets.symmetric(vertical: 16),
                   ),
-                  icon: const Icon(Icons.bluetooth, color: Colors.blueAccent),
+                  icon: const Icon(
+                    Icons.bluetooth,
+                    color: AppPalette.brandAccent,
+                  ),
                   label: const Text(
                     'Set Up New Panel',
-                    style: TextStyle(color: Colors.blueAccent, fontSize: 16),
+                    style: TextStyle(
+                      color: AppPalette.brandAccent,
+                      fontSize: 16,
+                    ),
                   ),
                   onPressed: () {
                     Navigator.pushReplacementNamed(context, '/setup');

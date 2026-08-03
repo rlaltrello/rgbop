@@ -7,6 +7,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:http/http.dart' as http;
+import 'app_palette.dart';
 
 class GameControllerScreen extends StatefulWidget {
   final String panelIp;
@@ -290,13 +291,15 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
   Future<void> _sendStopRequestRemote() async {
     final client = http.Client();
     try {
-      await client.post(
-        Uri.parse('http://${widget.panelIp}/api/game/stop'),
-        headers: const {
-          'Content-Type': 'application/json',
-          'Connection': 'close',
-        },
-      ).timeout(const Duration(seconds: 2));
+      await client
+          .post(
+            Uri.parse('http://${widget.panelIp}/api/game/stop'),
+            headers: const {
+              'Content-Type': 'application/json',
+              'Connection': 'close',
+            },
+          )
+          .timeout(const Duration(seconds: 2));
     } catch (e) {
       debugPrint('Stop request error: $e');
     } finally {
@@ -569,8 +572,8 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
 
   Widget _buildDpadController() {
     return SizedBox(
-      width: _joystickSize+25, // bit more space for buttons
-      height: _joystickSize+25,
+      width: _joystickSize + 25, // bit more space for buttons
+      height: _joystickSize + 25,
       child: Stack(
         alignment: Alignment.center,
         children: [
@@ -664,7 +667,7 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Card(
-              color: const Color(0xFF1E1E1E),
+              color: AppPalette.surfacePanel.withValues(alpha: 0.45),
               child: Padding(
                 padding: const EdgeInsets.all(16),
                 child: Column(
@@ -673,7 +676,7 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
                     Text(
                       _statusText,
                       style: const TextStyle(
-                        color: Colors.blueAccent,
+                        color: Colors.white,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -686,22 +689,22 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
                           color: !_isGameModeActive
                               ? Colors.white54
                               : (socketOpen
-                                  ? Colors.greenAccent
-                                  : Colors.orangeAccent),
+                                    ? AppPalette.statusSuccess
+                                    : AppPalette.statusWarning),
                         ),
                         const SizedBox(width: 6),
                         Text(
                           !_isGameModeActive
                               ? 'Idle'
                               : (socketOpen
-                                  ? 'Connected'
-                                  : 'Connecting ($_socketReconnectAttempt)'),
+                                    ? 'Connected'
+                                    : 'Connecting ($_socketReconnectAttempt)'),
                           style: TextStyle(
                             color: !_isGameModeActive
                                 ? Colors.white54
                                 : (socketOpen
-                                    ? Colors.greenAccent
-                                    : Colors.orangeAccent),
+                                      ? AppPalette.statusSuccess
+                                      : AppPalette.statusWarning),
                             fontWeight: FontWeight.w600,
                           ),
                         ),
@@ -710,14 +713,14 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
                     const SizedBox(height: 8),
                     Text(
                       'Panel: ${widget.panelIp}',
-                      style: const TextStyle(color: Colors.white54),
+                      style: const TextStyle(color: Colors.white70),
                     ),
                   ],
                 ),
               ),
             ),
             const SizedBox(height: 16),
-            
+
             // --- GAME SELECTION SELECTOR ---
             SegmentedButton<String>(
               segments: const [
@@ -733,7 +736,8 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
                 ),
               ],
               selected: {_selectedGame},
-              onSelectionChanged: (_isConnecting || _isGameModeActive || _isStopping)
+              onSelectionChanged:
+                  (_isConnecting || _isGameModeActive || _isStopping)
                   ? null
                   : (newSelection) {
                       setState(() {
@@ -747,7 +751,15 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: (_isConnecting || _isStopping || _isGameModeActive)
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppPalette.brandAccent,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: AppPalette.surfaceTile
+                          .withValues(alpha: 0.65),
+                      disabledForegroundColor: Colors.white54,
+                    ),
+                    onPressed:
+                        (_isConnecting || _isStopping || _isGameModeActive)
                         ? null
                         : _startGameMode,
                     icon: _isConnecting
@@ -763,6 +775,13 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppPalette.statusDanger,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: AppPalette.surfaceTile
+                          .withValues(alpha: 0.65),
+                      disabledForegroundColor: Colors.white54,
+                    ),
                     onPressed: (_isGameModeActive && !_isStopping)
                         ? _stopGameMode
                         : null,
@@ -797,7 +816,7 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
                         _buildActionButton(
                           label: 'B',
                           pressed: _bPressed,
-                          color: Colors.blueAccent,
+                          color: AppPalette.brandAccent,
                         ),
                       ],
                     ),

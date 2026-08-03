@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'app_palette.dart';
 
 class PanelStorageInfo {
   final int totalBytes;
@@ -42,10 +43,10 @@ class PanelStorageCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final progressColor = info.percentFull >= 90
-        ? Colors.redAccent
+        ? AppPalette.statusDanger
         : info.percentFull >= 75
-        ? Colors.amber
-        : Colors.blueAccent;
+        ? AppPalette.statusWarning
+        : AppPalette.brandAccent;
     final accentBackground = info.percentFull >= 90
         ? const Color(0x33FF5252)
         : info.percentFull >= 75
@@ -55,7 +56,7 @@ class PanelStorageCard extends StatelessWidget {
         ? const Color(0x66FF5252)
         : info.percentFull >= 75
         ? const Color(0x66FFC107)
-        : Colors.white10;
+        : AppPalette.overlayWhite10;
     final statusLabel = info.percentFull >= 90
         ? 'Nearly full'
         : info.percentFull >= 75
@@ -70,13 +71,13 @@ class PanelStorageCard extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E1E),
+        color: AppPalette.surfaceCard,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: borderColor),
         gradient: LinearGradient(
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
-          colors: [const Color(0xFF1E1E1E), accentBackground],
+          colors: [AppPalette.surfaceCard, accentBackground],
         ),
       ),
       child: Column(
@@ -173,7 +174,7 @@ class PanelStorageCard extends StatelessWidget {
               value: info.fullness,
               minHeight: 10,
               color: progressColor,
-              backgroundColor: Colors.white12,
+              backgroundColor: AppPalette.overlayWhite12,
             ),
           ),
           const SizedBox(height: 14),
@@ -191,7 +192,7 @@ class PanelStorageCard extends StatelessWidget {
                 child: _StorageStat(
                   label: 'Free',
                   value: _formatBytes(info.freeBytes),
-                  color: Colors.greenAccent,
+                  color: AppPalette.statusSuccess,
                 ),
               ),
               const SizedBox(width: 10),
@@ -233,10 +234,10 @@ class _PanelStorageSectionState extends State<PanelStorageSection> {
   @override
   Widget build(BuildContext context) {
     final toneColor = widget.info.percentFull >= 90
-        ? Colors.redAccent
+        ? AppPalette.statusDanger
         : widget.info.percentFull >= 75
-        ? Colors.amber
-        : Colors.blueAccent;
+        ? AppPalette.statusWarning
+        : AppPalette.brandAccent;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -247,9 +248,9 @@ class _PanelStorageSectionState extends State<PanelStorageSection> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: const Color(0xFF1E1E1E),
+              color: AppPalette.surfaceCard,
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white10),
+              border: Border.all(color: AppPalette.overlayWhite10),
             ),
             child: Row(
               children: [

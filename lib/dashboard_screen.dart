@@ -10,6 +10,7 @@ import 'game_controller_screen.dart';
 import 'package:geolocator/geolocator.dart';
 import 'doodle_gallery.dart';
 import 'spotify_auth_callback_controller.dart';
+import 'app_palette.dart';
 
 enum RadarTimeFormat { off, format12h, format24h }
 
@@ -153,7 +154,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       context: context,
       builder: (context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
+          backgroundColor: AppPalette.surfacePanel,
           title: const Text(
             'Panel Name',
             style: TextStyle(color: Colors.white),
@@ -241,7 +242,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             e.toString(),
             style: const TextStyle(color: Colors.white),
           ),
-          backgroundColor: Colors.redAccent,
+          backgroundColor: AppPalette.statusDanger,
         ),
       );
     } finally {
@@ -530,12 +531,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
       barrierDismissible: false,
       builder: (BuildContext context) {
         return AlertDialog(
-          backgroundColor: const Color(0xFF1E1E1E),
+          backgroundColor: AppPalette.surfacePanel,
           title: const Row(
             children: [
-              Icon(Icons.warning_amber_rounded, color: Colors.redAccent),
+              Icon(Icons.warning_amber_rounded, color: AppPalette.statusDanger),
               SizedBox(width: 8),
-              Text("Factory Reset?", style: TextStyle(color: Colors.redAccent)),
+              Text(
+                "Factory Reset?",
+                style: TextStyle(color: AppPalette.statusDanger),
+              ),
             ],
           ),
           content: const Text(
@@ -548,7 +552,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
               onPressed: () => Navigator.of(context).pop(),
             ),
             TextButton(
-              style: TextButton.styleFrom(foregroundColor: Colors.redAccent),
+              style: TextButton.styleFrom(
+                foregroundColor: AppPalette.statusDanger,
+              ),
               child: const Text(
                 "Yes, Reset Panel",
                 style: TextStyle(fontWeight: FontWeight.bold),
@@ -567,7 +573,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showError(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.red),
+        SnackBar(
+          content: Text(message),
+          backgroundColor: AppPalette.statusDanger,
+        ),
       );
     }
   }
@@ -575,7 +584,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _showSuccess(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message), backgroundColor: Colors.green),
+        SnackBar(
+          content: Text(message),
+          backgroundColor: AppPalette.statusSuccess,
+        ),
       );
     }
   }
@@ -617,6 +629,99 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildDashboardNavTile({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required VoidCallback onTap,
+  }) {
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Card(
+      color: AppPalette.surfacePanel,
+      elevation: 3,
+      shadowColor: AppPalette.overlayScrim,
+      clipBehavior: Clip.antiAlias,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(18),
+        side: const BorderSide(color: AppPalette.overlayWhite12),
+      ),
+      child: ListTile(
+        minTileHeight: 90,
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: AppPalette.brandAccent.withValues(alpha: 0.2),
+            shape: BoxShape.circle,
+            border: Border.all(color: AppPalette.overlayWhite12),
+          ),
+          alignment: Alignment.center,
+          child: Icon(icon, color: AppPalette.brandAccent),
+        ),
+        title: Text(
+          title,
+          style: const TextStyle(
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+        ),
+        subtitle: Padding(
+          padding: const EdgeInsets.only(top: 4),
+          child: Text(
+            subtitle,
+            style: TextStyle(
+              color: colorScheme.onSurface.withValues(alpha: 0.82),
+            ),
+          ),
+        ),
+        trailing: Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: AppPalette.brandAccent.withValues(alpha: 0.2),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          alignment: Alignment.center,
+          child: const Icon(Icons.chevron_right, color: AppPalette.brandAccent),
+        ),
+        onTap: onTap,
+      ),
+    );
+  }
+
+  Widget _buildDashboardSectionHeader({
+    required String title,
+    required IconData icon,
+  }) {
+    return Row(
+      children: [
+        Container(
+          width: 38,
+          height: 38,
+          decoration: BoxDecoration(
+            color: AppPalette.brandAccent.withValues(alpha: 0.2),
+            shape: BoxShape.circle,
+            border: Border.all(color: AppPalette.overlayWhite12),
+          ),
+          alignment: Alignment.center,
+          child: Icon(icon, color: AppPalette.brandAccent, size: 20),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          title,
+          style: const TextStyle(
+            color: AppPalette.brandAccent,
+            fontWeight: FontWeight.bold,
+            fontSize: 16,
+          ),
+        ),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_isLoading) {
@@ -645,7 +750,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(Icons.wifi_off, color: Colors.redAccent, size: 64),
+                const Icon(
+                  Icons.wifi_off,
+                  color: AppPalette.statusDanger,
+                  size: 64,
+                ),
                 const SizedBox(height: 16),
                 const Text(
                   "Panel not reachable right now.",
@@ -665,7 +774,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 24),
                 ElevatedButton.icon(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blueAccent,
+                    backgroundColor: AppPalette.brandAccent,
                   ),
                   onPressed: () {
                     setState(() {
@@ -683,14 +792,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 12),
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Colors.blueAccent),
+                    side: const BorderSide(color: AppPalette.brandAccent),
                   ),
                   onPressed: () =>
                       Navigator.pushReplacementNamed(context, '/setup'),
-                  icon: const Icon(Icons.bluetooth, color: Colors.blueAccent),
+                  icon: const Icon(
+                    Icons.bluetooth,
+                    color: AppPalette.brandAccent,
+                  ),
                   label: const Text(
                     "Set Up New Panel",
-                    style: TextStyle(color: Colors.blueAccent),
+                    style: TextStyle(color: AppPalette.brandAccent),
                   ),
                 ),
               ],
@@ -724,7 +836,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 )
               : IconButton(
-                  icon: const Icon(Icons.save, color: Colors.blueAccent),
+                  icon: const Icon(Icons.save, color: AppPalette.brandAccent),
                   onPressed: _saveSettings,
                 ),
         ],
@@ -786,18 +898,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           // --- WIDGET TOGGLES ---
           Card(
-            color: const Color(0xFF1E1E1E),
+            color: AppPalette.surfacePanel,
             child: Column(
               children: [
                 const ListTile(
                   title: Text(
                     "Active Widgets",
                     style: TextStyle(
-                      color: Colors.blueAccent,
+                      color: AppPalette.brandAccent,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  leading: Icon(Icons.dashboard, color: Colors.blueAccent),
+                  leading: Icon(Icons.dashboard, color: AppPalette.brandAccent),
                 ),
                 SwitchListTile(
                   title: const Text("Diagnostics"),
@@ -843,7 +955,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: Text(
                           "Radar Settings",
                           style: TextStyle(
-                            color: Colors.blueAccent,
+                            color: AppPalette.brandAccent,
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
@@ -988,7 +1100,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: Text(
                           "Spotify Settings",
                           style: TextStyle(
-                            color: Colors.blueAccent,
+                            color: AppPalette.brandAccent,
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1010,7 +1122,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           if (states.contains(
                                             WidgetState.selected,
                                           )) {
-                                            return const Color(0xFF1DB954);
+                                            return AppPalette.brandAccent;
                                           }
                                           return Colors.grey;
                                         }),
@@ -1021,9 +1133,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           if (states.contains(
                                             WidgetState.selected,
                                           )) {
-                                            return const Color(
-                                              0xFF1DB954,
-                                            ).withValues(alpha: 0.5);
+                                            return AppPalette.brandAccent
+                                                .withValues(alpha: 0.5);
                                           }
                                           return Colors.grey.withValues(
                                             alpha: 0.3,
@@ -1048,7 +1159,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           if (states.contains(
                                             WidgetState.selected,
                                           )) {
-                                            return const Color(0xFF1DB954);
+                                            return AppPalette.brandAccent;
                                           }
                                           return Colors.grey;
                                         }),
@@ -1059,9 +1170,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           if (states.contains(
                                             WidgetState.selected,
                                           )) {
-                                            return const Color(
-                                              0xFF1DB954,
-                                            ).withValues(alpha: 0.5);
+                                            return AppPalette.brandAccent
+                                                .withValues(alpha: 0.5);
                                           }
                                           return Colors.grey.withValues(
                                             alpha: 0.3,
@@ -1103,7 +1213,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: Text(
                           "Text Blast Settings",
                           style: TextStyle(
-                            color: Colors.blueAccent,
+                            color: AppPalette.brandAccent,
                             fontSize: 14,
                             fontWeight: FontWeight.bold,
                           ),
@@ -1125,7 +1235,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           if (states.contains(
                                             WidgetState.selected,
                                           )) {
-                                            return const Color(0xFF1DB954);
+                                            return AppPalette.brandAccent;
                                           }
                                           return Colors.grey;
                                         }),
@@ -1136,9 +1246,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           if (states.contains(
                                             WidgetState.selected,
                                           )) {
-                                            return const Color(
-                                              0xFF1DB954,
-                                            ).withValues(alpha: 0.5);
+                                            return AppPalette.brandAccent
+                                                .withValues(alpha: 0.5);
                                           }
                                           return Colors.grey.withValues(
                                             alpha: 0.3,
@@ -1353,7 +1462,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               min: 1,
                               max: 60,
                               divisions: 59,
-                              activeColor: Colors.blueAccent,
+                              activeColor: AppPalette.brandAccent,
                               label: "$_transitionTime sec",
                               onChanged: (val) {
                                 setState(() => _transitionTime = val.toInt());
@@ -1382,25 +1491,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           // --- DISPLAY & BRIGHTNESS ---
           Card(
-            color: const Color(0xFF1E1E1E),
+            color: AppPalette.surfacePanel,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.lightbulb_outline, color: Colors.amberAccent),
-                      SizedBox(width: 16),
-                      Text(
-                        "Display & Brightness",
-                        style: TextStyle(
-                          color: Colors.amberAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
+                  _buildDashboardSectionHeader(
+                    title: 'Display & Brightness',
+                    icon: Icons.lightbulb_outline,
                   ),
                   const SizedBox(height: 16),
                   const Text("Global Brightness"),
@@ -1409,7 +1508,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     min: 1,
                     max: 255,
                     divisions: 254,
-                    activeColor: Colors.amberAccent,
+                    activeColor: AppPalette.brandAccent,
                     label: _brightness.round().toString(),
                     onChanged: (val) {
                       setState(() => _brightness = val);
@@ -1418,7 +1517,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   SwitchListTile(
                     contentPadding: EdgeInsets.zero,
                     title: const Text("Night Mode (Dim to Near Zero)"),
-                    activeThumbColor: Colors.amberAccent,
+                    activeThumbColor: AppPalette.brandAccent,
                     value: _nightMode,
                     onChanged: (val) => setState(() => _nightMode = val),
                   ),
@@ -1464,134 +1563,108 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 16),
 
           // --- MEDIA MANAGEMENT ---
-          Card(
-            color: const Color(0xFF1E1E1E),
-            child: ListTile(
-              leading: const Icon(Icons.gif_box, color: Colors.blueAccent),
-              title: const Text(
-                "Manage GIFs",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text("Upload and delete panel animations"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                FocusScope.of(context).unfocus();
-                if (_panelIp != null) {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) =>
-                          GifManagerScreen(panelIp: _panelIp!),
-                    ),
-                  );
-                }
-              },
-            ),
+          _buildDashboardNavTile(
+            context: context,
+            icon: Icons.gif_box,
+            title: "Manage GIFs",
+            subtitle: "Upload and delete panel animations",
+            onTap: () {
+              FocusScope.of(context).unfocus();
+              if (_panelIp != null) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => GifManagerScreen(panelIp: _panelIp!),
+                  ),
+                );
+              }
+            },
           ),
           const SizedBox(height: 16),
 
           // --- DOODLE MANAGEMENT ---
-          Card(
-            color: const Color(0xFF1E1E1E),
-            child: ListTile(
-              leading: const Icon(Icons.brush, color: Colors.blueAccent),
-              title: const Text(
-                "Manage Doodles",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text("Let your creativity shine!"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                FocusScope.of(context).unfocus();
-                if (_panelIp == null || _panelIp!.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'No panel selected. Return to picker and reconnect.',
-                      ),
+          _buildDashboardNavTile(
+            context: context,
+            icon: Icons.brush,
+            title: "Manage Doodles",
+            subtitle: "Let your creativity shine!",
+            onTap: () {
+              FocusScope.of(context).unfocus();
+              if (_panelIp == null || _panelIp!.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'No panel selected. Return to picker and reconnect.',
                     ),
-                  );
-                  return;
-                }
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => DoodleGallery(panelIp: _panelIp),
                   ),
                 );
-              },
-            ),
+                return;
+              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => DoodleGallery(panelIp: _panelIp),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 16),
 
           // --- GAME MODE ---
-          Card(
-            color: const Color(0xFF1E1E1E),
-            child: ListTile(
-              leading: const Icon(
-                Icons.sports_esports,
-                color: Colors.orangeAccent,
-              ),
-              title: const Text(
-                "Game Mode",
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              subtitle: const Text("Directional controls and fire button"),
-              trailing: const Icon(Icons.chevron_right),
-              onTap: () {
-                FocusScope.of(context).unfocus();
-                if (_panelIp == null || _panelIp!.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text(
-                        'No panel selected. Return to picker and reconnect.',
-                      ),
+          _buildDashboardNavTile(
+            context: context,
+            icon: Icons.sports_esports,
+            title: "Game Mode",
+            subtitle: "Directional controls and fire button",
+            onTap: () {
+              FocusScope.of(context).unfocus();
+              if (_panelIp == null || _panelIp!.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text(
+                      'No panel selected. Return to picker and reconnect.',
                     ),
-                  );
-                  return;
-                }
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        GameControllerScreen(panelIp: _panelIp!),
                   ),
                 );
-              },
-            ),
+                return;
+              }
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) =>
+                      GameControllerScreen(panelIp: _panelIp!),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 16),
 
           // --- LOCATION ---
           Card(
-            color: const Color(0xFF1E1E1E),
+            color: AppPalette.surfacePanel,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.location_on, color: Colors.blueAccent),
-                      SizedBox(width: 16),
-                      Text(
-                        "Location Settings",
-                        style: TextStyle(
-                          color: Colors.blueAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
+                  _buildDashboardSectionHeader(
+                    title: 'Location Settings',
+                    icon: Icons.location_on,
                   ),
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.blueAccent.withValues(
-                          alpha: 0.2,
+                        backgroundColor: AppPalette.brandAccent,
+                        foregroundColor: Colors.white,
+                        disabledBackgroundColor: AppPalette.surfaceTile,
+                        disabledForegroundColor: Colors.white70,
+                        side: const BorderSide(
+                          color: Colors.white70,
+                          width: 1.25,
                         ),
-                        foregroundColor: Colors.blueAccent,
+                        elevation: 4,
+                        shadowColor: AppPalette.brandAccent,
                         padding: const EdgeInsets.symmetric(vertical: 12),
                       ),
                       onPressed: _isFetchingLocation
@@ -1608,7 +1681,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         _isFetchingLocation
                             ? "Fetching GPS..."
                             : "Use Current Location",
-                        style: const TextStyle(fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.2,
+                        ),
                       ),
                     ),
                   ),
@@ -1640,7 +1716,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
           // --- OPENSKY ---
           Card(
-            color: const Color(0xFF1E1E1E),
+            color: AppPalette.surfacePanel,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
@@ -1648,19 +1724,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Row(
-                        children: [
-                          Icon(Icons.flight, color: Colors.blueAccent),
-                          SizedBox(width: 16),
-                          Text(
-                            "OpenSky API",
-                            style: TextStyle(
-                              color: Colors.blueAccent,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 16,
-                            ),
-                          ),
-                        ],
+                      _buildDashboardSectionHeader(
+                        title: 'OpenSky API',
+                        icon: Icons.flight,
                       ),
                       TextButton.icon(
                         onPressed: () async {
@@ -1719,24 +1785,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           const SizedBox(height: 32),
           Card(
-            color: const Color(0xFF1E1E1E),
+            color: AppPalette.surfacePanel,
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(
                 children: [
-                  const Row(
-                    children: [
-                      Icon(Icons.music_note, color: Colors.greenAccent),
-                      SizedBox(width: 16),
-                      Text(
-                        "Spotify API",
-                        style: TextStyle(
-                          color: Colors.greenAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 16,
-                        ),
-                      ),
-                    ],
+                  _buildDashboardSectionHeader(
+                    title: 'Spotify API',
+                    icon: Icons.music_note,
                   ),
                   const SizedBox(height: 16),
                   Text(
@@ -1762,7 +1818,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               : Icons.check_circle,
                           color: _spotifyRefreshTokenCtrl.text.isEmpty
                               ? Colors.white54
-                              : Colors.greenAccent,
+                              : AppPalette.brandAccent,
                         ),
                         const SizedBox(width: 12),
                         Expanded(
@@ -1781,8 +1837,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     width: double.infinity,
                     child: ElevatedButton.icon(
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.greenAccent,
-                        foregroundColor: Colors.black,
+                        backgroundColor: AppPalette.brandAccent,
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onPressed: (_isAuthorizingSpotify || _isSaving)
@@ -1818,8 +1874,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
           // --- DANGER ZONE ---
           ElevatedButton.icon(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent.withValues(alpha: 0.2),
-              foregroundColor: Colors.redAccent,
+              backgroundColor: AppPalette.statusDanger.withValues(alpha: 0.2),
+              foregroundColor: AppPalette.statusDanger,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
             onPressed: _isResetting ? null : _confirmFactoryReset,

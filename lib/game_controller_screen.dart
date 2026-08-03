@@ -549,8 +549,8 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
       onPointerUp: (_) => _setDpadButtonState(direction, false),
       onPointerCancel: (_) => _setDpadButtonState(direction, false),
       child: Container(
-        width: 52,
-        height: 52,
+        width: 65,
+        height: 65,
         decoration: BoxDecoration(
           color: pressed
               ? Colors.blueGrey.withValues(alpha: 0.95)
@@ -569,8 +569,8 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
 
   Widget _buildDpadController() {
     return SizedBox(
-      width: _joystickSize,
-      height: _joystickSize,
+      width: _joystickSize+25, // bit more space for buttons
+      height: _joystickSize+25,
       child: Stack(
         alignment: Alignment.center,
         children: [

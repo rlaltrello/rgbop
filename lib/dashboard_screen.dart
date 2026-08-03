@@ -43,6 +43,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _showEarthquake = true;
   bool _showSpotify = true;
   bool _spotifyShowOnPause = true;
+  bool _spotifyShowOnlyAlbumArt = false;
   bool _showDiags = true;
   bool _showTextBlast = true;
   int _textBlastTextScale = 1;
@@ -328,6 +329,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _showEarthquake = data['earthquake'] ?? true;
           _showSpotify = data['spotify'] ?? true;
           _spotifyShowOnPause = data['spotifyShowOnPause'] ?? true;
+          _spotifyShowOnlyAlbumArt = data['spotifyShowOnlyAlbumArt'] ?? false;
           _showDiags = data['diags'] ?? true;
           _showTextBlast = data['textblast'] ?? true;
           _textBlastTextScale = data['textBlastTextScale'] ?? 1;
@@ -392,6 +394,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "earthquake": _showEarthquake,
         "spotify": _showSpotify,
         "spotifyShowOnPause": _spotifyShowOnPause,
+        "spotifyShowOnlyAlbumArt": _spotifyShowOnlyAlbumArt,
         "diags": _showDiags,
         "textblast": _showTextBlast,
         "textBlastTextScale": _textBlastTextScale,
@@ -1033,6 +1036,45 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   value: _spotifyShowOnPause,
                                   onChanged: (v) =>
                                       setState(() => _spotifyShowOnPause = v),
+                                ),
+                              ),
+                              Theme(
+                                data: Theme.of(context).copyWith(
+                                  switchTheme: SwitchThemeData(
+                                    thumbColor:
+                                        WidgetStateProperty.resolveWith<Color>((
+                                          states,
+                                        ) {
+                                          if (states.contains(
+                                            WidgetState.selected,
+                                          )) {
+                                            return const Color(0xFF1DB954);
+                                          }
+                                          return Colors.grey;
+                                        }),
+                                    trackColor:
+                                        WidgetStateProperty.resolveWith<Color>((
+                                          states,
+                                        ) {
+                                          if (states.contains(
+                                            WidgetState.selected,
+                                          )) {
+                                            return const Color(
+                                              0xFF1DB954,
+                                            ).withValues(alpha: 0.5);
+                                          }
+                                          return Colors.grey.withValues(
+                                            alpha: 0.3,
+                                          );
+                                        }),
+                                  ),
+                                ),
+                                child: SwitchListTile(
+                                  title: const Text("Show Only Album Art"),
+                                  value: _spotifyShowOnlyAlbumArt,
+                                  onChanged: (v) => setState(
+                                    () => _spotifyShowOnlyAlbumArt = v,
+                                  ),
                                 ),
                               ),
                             ],

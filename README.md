@@ -1,8 +1,10 @@
-Here is the updated Product Requirements Document, fully branded for **RGBop** so you can stash it in your project archives.
-
-# Product Requirements Document (PRD)
-
+(YET ANOTHER)
 ## Project RGBop: ESP32-S3 Matrix Companion System
+
+This was a fun project to assemble from a hardware(ESP32-S3 and 64x64 Hub75 Matrix panel) and software (Flutter, Microcontroller code, node server).
+
+There are hundreds of other similar projects, but this was my approach.  I will document it all at RGBop.com.
+
 
 ---
 
@@ -15,7 +17,7 @@ The primary objective is to transform a raw hardware project into a consumer-gra
 ### Primary Goals
 
 * **Zero-Config Provisioning:** Seamlessly pass local Wi-Fi credentials from a mobile device to a headless ESP32-S3 panel.
-* **Remote Configuration:** Update global system parameters such as geographic location for API consumption (e.g., weather, time zones, ISS tracking).
+* **Remote Configuration:** Update global system parameters such as geographic location for API consumption (e.g., weather, clocks, GIFs, Doodles, etc).
 * **Dynamic Layout Management:** Enable real-time manipulation of active display components (widgets), including visibility toggles and display sequencing.
 * **Asset Management:** Provide a wireless interface to upload, list, and delete custom graphics (GIFs) stored locally on the microcontroller's filesystem.
 
@@ -43,7 +45,7 @@ The RGBop app targets a highly capable hardware profile. The system requirements
 
 ### Module 2: Local Discovery (mDNS)
 
-* **FR-2.1:** Once both devices share a network layer, the app must resolve the microcontroller's IP address dynamically using Multicast DNS (e.g., `rgbop.local`).
+* **FR-2.1:** Once both devices share a network layer, the app must resolve the microcontroller's IP address dynamically using Multicast DNS (e.g., `rgbopXXXXXX.local`).
 * **FR-2.2:** The app must seamlessly handle IP address updates caused by DHCP lease renewals without requiring user intervention.
 
 ### Module 3: Remote System Configuration
@@ -54,7 +56,7 @@ The RGBop app targets a highly capable hardware profile. The system requirements
 ### Module 4: Widget Sequencing & Layout Control
 
 * **FR-4.1:** The app must fetch the current execution array of display modules (e.g., `MarioClock`, `WeatherModule`, `DateProgress`) via a `GET` request to `/api/widgets`.
-* **FR-4.2:** The UI must display these modules in a draggable list view allowing the user to modify execution hierarchy and order.
+* **FR-4.2:** The UI must display these modules in a draggable list view allowing the user to modify execution hierarchy and order. (skipped for now)
 * **FR-4.3:** Each widget must have a toggle switch to flag its runtime execution state (`enabled: true/false`).
 * **FR-4.4:** Changes to order or state must immediately dispatch an organized JSON structure back to the device to modify the display queue.
 
@@ -71,8 +73,8 @@ The RGBop app targets a highly capable hardware profile. The system requirements
 
 ### Mobile Client (Flutter)
 
-* **State Management:** Riverpod or Provider for clean dependency injection and reactive UI states.
-* **Network Layer:** `dio` or `http` for custom timeout mappings, progress tracking during asset uploads, and handling multipart requests.
+* **State Management:** Provider for clean dependency injection and reactive UI states.
+* **Network Layer:** `http` for custom timeout mappings, progress tracking during asset uploads, and handling multipart requests.
 * **Connectivity Packages:** `flutter_blue_plus` for low-level BLE abstraction; `multicast_dns` for zero-configuration mDNS lookups.
 * **UI Components:** `ReorderableListView` for drag-and-drop widget prioritization loops.
 
@@ -84,25 +86,4 @@ The RGBop app targets a highly capable hardware profile. The system requirements
 
 ---
 
-## 5. Phased Release Plan
-
-| Phase | Milestone Name | Core Objectives | App Deliverables | Firmware Deliverables |
-| --- | --- | --- | --- | --- |
-| **Phase 1** | **Provisioning** | Bridge the gap between phone and hardware. | BLE Setup screen, SSID/Pass input forms, validation loops. | BLE service advertisement, Wi-Fi initialization handlers, credential storage. |
-| **Phase 2** | **Discovery** | Locate the device over local networks automatically. | mDNS scanning sequence on app boot, connection status UI. | mDNS daemon broadcasting `rgbop.local`. |
-| **Phase 3** | **State Syncing** | Read and write JSON states for configurations. | Main settings panel, location input, API communication logic. | `/api/config` REST endpoints, payload parsing routines. |
-| **Phase 4** | **Widget Management** | Modify what displays on the panel dynamically. | Draggable list view interfaces with visibility switches. | `/api/widgets` handler, runtime display queue mapping mutations. |
-| **Phase 5** | **Asset Server** | Remotely manage physical GIF media. | File manager dashboard, capacity indicators, native file pickers. | Async upload chunk processors, deletion hooks in LittleFS. |
-
----
-
-## 6. Constraints & Edge Cases
-
-> ### Critical System Warnings
-> 
-> 
-> * **SPI Flash Write Delays:** Heavy writing activities to LittleFS (such as uploading larger animated GIFs) will briefly occupy the internal SPI flash bus. The app must expect potential momentary drops in server responsiveness, and the firmware must rely heavily on PSRAM frame storage to mitigate visible panel flicker during transfers.
-> * **Payload Validation:** To safeguard the display code from unexpected crashes, the firmware must implement strict size-checking limits on incoming JSON arrays to verify they do not overflow memory allocations before writing them back down to the partition.
-> 
->
 

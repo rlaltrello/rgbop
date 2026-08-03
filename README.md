@@ -80,7 +80,7 @@ The RGBop app targets a highly capable hardware profile. The system requirements
 
 ### Firmware Server (ESP32-S3 C++)
 
-* **Networking Engine:** `ESPAsyncWebServer` combined with `AsyncTCP` to prevent blockages on the core display loop during bulk transfers.
+* **Networking Engine:** `WebServer` that does its best.
 * **JSON Serialization:** `ArduinoJson` for parsing layout matrices and application states.
 * **Storage Access:** `LittleFS` library managing persistent records on internal flash memories.
 

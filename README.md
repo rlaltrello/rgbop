@@ -6,6 +6,9 @@ This was a fun project to assemble from a hardware(ESP32-S3 and 64x64 Hub75 Matr
 There are hundreds of other similar projects, but this was my approach.  I will document it all at RGBop.com.
 
 
+This works together with rgbop_server and rgbop_esp32 to do a little dance of functionality...
+
+
 ---
 
 ## 1. Executive Summary & Objectives

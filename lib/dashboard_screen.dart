@@ -525,6 +525,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (mounted) setState(() => _isResetting = false);
   }
 
+  void _showDashboardInstructions() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          backgroundColor: AppPalette.surfacePanel,
+          title: const Row(
+            children: [
+              Icon(Icons.info_outline, color: AppPalette.brandAccent),
+              SizedBox(width: 8),
+              Text(
+                'Dashboard Guide',
+                style: TextStyle(color: Colors.white),
+              ),
+            ],
+          ),
+          content: const SingleChildScrollView(
+            child: Text(
+              'Welcome to your RGBop Control Dashboard!\n\n'
+              '• Active Widgets: Toggle which items rotate on your LED panel display.\n'
+              '• Location Settings: Used for local weather forecasts and radar map generation.\n'
+              '• Spotify Integration: Connect your account to display live track info and album art directly on the panel.\n'
+              '• Saving Changes: Be sure to tap the Save icon (floppy disk) on the top right whenever you modify settings to send them directly to your panel.',
+              style: TextStyle(color: Colors.white70, height: 1.4),
+            ),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppPalette.brandAccent,
+              ),
+              onPressed: () => Navigator.of(context).pop(),
+              child: const Text(
+                'Got It',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
   Future<void> _confirmFactoryReset() async {
     return showDialog<void>(
       context: context,
@@ -826,6 +869,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         title: const Text("RGBop Control"),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.help_outline, color: AppPalette.brandAccent),
+            tooltip: 'Dashboard Help',
+            onPressed: _showDashboardInstructions,
+          ),
           _isSaving
               ? const Padding(
                   padding: EdgeInsets.all(16.0),

@@ -75,6 +75,7 @@ class BootRouter extends StatefulWidget {
 
 class _BootRouterState extends State<BootRouter> {
   static const String _recentHostsKey = 'recent_successful_hosts';
+  static const String _hasSeenWelcomeKey = 'has_seen_welcome';
   static const int _maxRecentHosts = 8;
 
   final RGBopMdnsService _mdnsService = RGBopMdnsService();
@@ -90,6 +91,56 @@ class _BootRouterState extends State<BootRouter> {
     super.initState();
     _loadRecentHosts();
     _refreshPanels();
+    _checkFirstLaunch();
+  }
+
+  Future<void> _checkFirstLaunch() async {
+    final prefs = await SharedPreferences.getInstance();
+    final hasSeenWelcome = prefs.getBool(_hasSeenWelcomeKey) ?? false;
+
+    if (!hasSeenWelcome && mounted) {
+      // Wait until the first frame is rendered before showing the dialog
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _showWelcomeDialog(prefs);
+      });
+    }
+  }
+
+  void _showWelcomeDialog(SharedPreferences prefs) {
+    showDialog(
+      context: context,
+      barrierDismissible: false, // User must tap Got It
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: AppPalette.surfacePanel,
+          title: const Text(
+            'Welcome to RGBop!',
+            style: TextStyle(color: Colors.white),
+          ),
+          content: const Text(
+            'RGBop helps you discover, connect, and configure your 64x64 RGB matrix LED panels.\n\n'
+            'To get started, we will scan with bluetooth to look for available, unconfigured panels. After connecting via Bluetooth, you will configure the Wi-Fi credentials for the panel to use.  All future connections will be over your local Wi-Fi network.\n\n',
+            style: TextStyle(color: Colors.white70, height: 1.4),
+          ),
+          actions: [
+            ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppPalette.brandAccent,
+              ),
+              onPressed: () async {
+                // Save flag so it never shows again
+                await prefs.setBool(_hasSeenWelcomeKey, true);
+                if (context.mounted) Navigator.of(context).pop();
+              },
+              child: const Text(
+                'Get Started',
+                style: TextStyle(color: Colors.white),
+              ),
+            ),
+          ],
+        );
+      },
+    );
   }
 
   Future<void> _loadRecentHosts() async {

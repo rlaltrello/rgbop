@@ -15,7 +15,6 @@ class DoodleEditor extends StatefulWidget {
   final List<Color>? initialPixels;
 
   const DoodleEditor({super.key, this.existingFile, this.initialPixels});
-
   @override
   State<DoodleEditor> createState() => _DoodleEditorState();
 }
@@ -376,244 +375,266 @@ class _DoodleEditorState extends State<DoodleEditor> {
         ],
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: [
-              if (_isZoomMode)
-                GestureDetector(
-                  behavior: HitTestBehavior.opaque,
-                  onPanStart: (d) {
-                    if (!_isEyedropperMode) _saveToHistory();
-                    _handleZoomDrawing(
-                      d.localPosition,
-                      zoomWindowSize,
-                      isTap: true,
-                    );
-                  },
-                  onPanUpdate: (d) => _handleZoomDrawing(
-                    d.localPosition,
-                    zoomWindowSize,
-                    isTap: false,
-                  ),
-                  onPanEnd: (_) {
-                    if (_isEyedropperMode) {
-                      setState(() => _isEyedropperMode = false);
-                    }
-                  },
-                  child: Container(
-                    width: zoomWindowSize,
-                    height: zoomWindowSize,
-                    decoration: BoxDecoration(
-                      color: colorScheme.surfaceContainerHighest,
-                      border: Border.all(
-                        color: colorScheme.onSurface.withValues(alpha: 0.7),
-                        width: 3,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final shouldCenterOnWideScreen = constraints.maxWidth >= 700;
+            final editorContent = Padding(
+              padding: const EdgeInsets.symmetric(vertical: 16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (_isZoomMode)
+                    GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onPanStart: (d) {
+                        if (!_isEyedropperMode) _saveToHistory();
+                        _handleZoomDrawing(
+                          d.localPosition,
+                          zoomWindowSize,
+                          isTap: true,
+                        );
+                      },
+                      onPanUpdate: (d) => _handleZoomDrawing(
+                        d.localPosition,
+                        zoomWindowSize,
+                        isTap: false,
                       ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: AppPalette.overlayScrim,
-                          blurRadius: 10,
-                          spreadRadius: 5,
+                      onPanEnd: (_) {
+                        if (_isEyedropperMode) {
+                          setState(() => _isEyedropperMode = false);
+                        }
+                      },
+                      child: Container(
+                        width: zoomWindowSize,
+                        height: zoomWindowSize,
+                        decoration: BoxDecoration(
+                          color: colorScheme.surfaceContainerHighest,
+                          border: Border.all(
+                            color: colorScheme.onSurface.withValues(alpha: 0.7),
+                            width: 3,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppPalette.overlayScrim,
+                              blurRadius: 10,
+                              spreadRadius: 5,
+                            ),
+                          ],
+                        ),
+                        child: CustomPaint(
+                          painter: ZoomedPainter(_pixels, _zoomOffset),
+                        ),
+                      ),
+                    )
+                  else
+                    const SizedBox(height: zoomWindowSize),
+
+                  const SizedBox(height: 24),
+
+                  GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onPanStart: (details) {
+                      if (_isZoomMode) {
+                        _isDraggingBox = true;
+                      } else {
+                        if (!_isEyedropperMode) _saveToHistory();
+                        _handleMainDrawing(
+                          details.localPosition,
+                          canvasSize,
+                          isTap: true,
+                        );
+                      }
+                    },
+                    onPanUpdate: (details) {
+                      if (_isZoomMode) {
+                        if (_isDraggingBox) {
+                          _updateZoomBoxPosition(details.delta, canvasSize);
+                        }
+                      } else {
+                        _handleMainDrawing(
+                          details.localPosition,
+                          canvasSize,
+                          isTap: false,
+                        );
+                      }
+                    },
+                    onPanEnd: (_) {
+                      _isDraggingBox = false;
+                      if (_isEyedropperMode) {
+                        setState(() => _isEyedropperMode = false);
+                      }
+                    },
+                    child: Container(
+                      width: canvasSize.width,
+                      height: canvasSize.height,
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: colorScheme.onSurface.withValues(alpha: 0.24),
+                          width: 2,
+                        ),
+                        color: Colors.black,
+                      ),
+                      child: CustomPaint(
+                        painter: PixelGridPainter(
+                          _pixels,
+                          widget.gridSize,
+                          _isZoomMode,
+                          _zoomOffset,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(height: 32),
+
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 12,
+                    ),
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    decoration: BoxDecoration(
+                      color: colorScheme.surfaceContainerHighest.withValues(
+                        alpha: 0.72,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Wrap(
+                      alignment: WrapAlignment.center,
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        GestureDetector(
+                          onTap: _openColorPicker,
+                          child: CircleAvatar(
+                            backgroundColor: _selectedColor,
+                            radius: 18,
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.format_color_fill,
+                            color: _isFillMode
+                                ? AppPalette.brandAccent
+                                : colorScheme.onSurface,
+                          ),
+                          onPressed: () =>
+                              setState(() => _isFillMode = !_isFillMode),
+                          tooltip: 'Flood Fill',
+                        ),
+                        GestureDetector(
+                          onTap: () => setState(
+                            () => _brushSize = _brushSize >= 3
+                                ? 1
+                                : _brushSize + 1,
+                          ),
+                          child: Container(
+                            width: 32,
+                            height: 32,
+                            alignment: Alignment.center,
+                            decoration: BoxDecoration(
+                              border: Border.all(
+                                color: colorScheme.onSurface.withValues(
+                                  alpha: 0.7,
+                                ),
+                                width: 2,
+                              ),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Text(
+                              '${_brushSize}x',
+                              style: TextStyle(
+                                color: colorScheme.onSurface,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            _isZoomMode ? Icons.zoom_out : Icons.zoom_in,
+                            color: _isZoomMode
+                                ? AppPalette.brandAccent
+                                : colorScheme.onSurface,
+                          ),
+                          onPressed: () => setState(() {
+                            _isZoomMode = !_isZoomMode;
+                            _isDraggingBox = false;
+                          }),
+                          tooltip: 'Zoom Window',
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.colorize,
+                            color: _isEyedropperMode
+                                ? AppPalette.brandAccent
+                                : colorScheme.onSurface,
+                          ),
+                          onPressed: () => setState(() {
+                            _isEyedropperMode = !_isEyedropperMode;
+                            if (_isEyedropperMode) _isFillMode = false;
+                          }),
+                          tooltip: 'Eyedropper',
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.photo_camera,
+                            color: colorScheme.onSurface,
+                          ),
+                          onPressed: _isImportingPhoto
+                              ? null
+                              : _importFromCamera,
+                          tooltip: 'Import from Camera',
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.photo_library,
+                            color: colorScheme.onSurface,
+                          ),
+                          onPressed: _isImportingPhoto
+                              ? null
+                              : _importFromGallery,
+                          tooltip: 'Import from Gallery',
+                        ),
+                        IconButton(
+                          icon: Icon(
+                            Icons.cleaning_services,
+                            color: colorScheme.onSurface.withValues(alpha: 0.7),
+                          ),
+                          onPressed: () =>
+                              setState(() => _selectedColor = Colors.black),
+                          tooltip: 'Eraser',
+                        ),
+                        IconButton(
+                          icon: const Icon(
+                            Icons.delete_forever,
+                            color: AppPalette.statusDanger,
+                          ),
+                          onPressed: () {
+                            _saveToHistory();
+                            setState(
+                              () => _pixels = List.filled(4096, Colors.black),
+                            );
+                          },
+                          tooltip: 'Clear All',
                         ),
                       ],
                     ),
-                    child: CustomPaint(
-                      painter: ZoomedPainter(_pixels, _zoomOffset),
-                    ),
                   ),
-                )
-              else
-                const SizedBox(height: zoomWindowSize),
-
-              const SizedBox(height: 24),
-
-              GestureDetector(
-                behavior: HitTestBehavior.opaque,
-                onPanStart: (details) {
-                  if (_isZoomMode) {
-                    _isDraggingBox = true;
-                  } else {
-                    if (!_isEyedropperMode) _saveToHistory();
-                    _handleMainDrawing(
-                      details.localPosition,
-                      canvasSize,
-                      isTap: true,
-                    );
-                  }
-                },
-                onPanUpdate: (details) {
-                  if (_isZoomMode) {
-                    if (_isDraggingBox) {
-                      _updateZoomBoxPosition(details.delta, canvasSize);
-                    }
-                  } else {
-                    _handleMainDrawing(
-                      details.localPosition,
-                      canvasSize,
-                      isTap: false,
-                    );
-                  }
-                },
-                onPanEnd: (_) {
-                  _isDraggingBox = false;
-                  if (_isEyedropperMode) {
-                    setState(() => _isEyedropperMode = false);
-                  }
-                },
-                child: Container(
-                  width: canvasSize.width,
-                  height: canvasSize.height,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: colorScheme.onSurface.withValues(alpha: 0.24),
-                      width: 2,
-                    ),
-                    color: Colors.black,
-                  ),
-                  child: CustomPaint(
-                    painter: PixelGridPainter(
-                      _pixels,
-                      widget.gridSize,
-                      _isZoomMode,
-                      _zoomOffset,
-                    ),
-                  ),
-                ),
+                ],
               ),
+            );
 
-              const SizedBox(height: 32),
+            if (shouldCenterOnWideScreen) {
+              return Center(child: editorContent);
+            }
 
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 12,
-                ),
-                margin: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: colorScheme.surfaceContainerHighest.withValues(
-                    alpha: 0.72,
-                  ),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Wrap(
-                  alignment: WrapAlignment.center,
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    GestureDetector(
-                      onTap: _openColorPicker,
-                      child: CircleAvatar(
-                        backgroundColor: _selectedColor,
-                        radius: 18,
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.format_color_fill,
-                        color: _isFillMode
-                            ? AppPalette.brandAccent
-                            : colorScheme.onSurface,
-                      ),
-                      onPressed: () =>
-                          setState(() => _isFillMode = !_isFillMode),
-                      tooltip: 'Flood Fill',
-                    ),
-                    GestureDetector(
-                      onTap: () => setState(
-                        () => _brushSize = _brushSize >= 3 ? 1 : _brushSize + 1,
-                      ),
-                      child: Container(
-                        width: 32,
-                        height: 32,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          border: Border.all(
-                            color: colorScheme.onSurface.withValues(alpha: 0.7),
-                            width: 2,
-                          ),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Text(
-                          '${_brushSize}x',
-                          style: TextStyle(
-                            color: colorScheme.onSurface,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12,
-                          ),
-                        ),
-                      ),
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        _isZoomMode ? Icons.zoom_out : Icons.zoom_in,
-                        color: _isZoomMode
-                            ? AppPalette.brandAccent
-                            : colorScheme.onSurface,
-                      ),
-                      onPressed: () => setState(() {
-                        _isZoomMode = !_isZoomMode;
-                        _isDraggingBox = false;
-                      }),
-                      tooltip: 'Zoom Window',
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.colorize,
-                        color: _isEyedropperMode
-                            ? AppPalette.brandAccent
-                            : colorScheme.onSurface,
-                      ),
-                      onPressed: () => setState(() {
-                        _isEyedropperMode = !_isEyedropperMode;
-                        if (_isEyedropperMode) _isFillMode = false;
-                      }),
-                      tooltip: 'Eyedropper',
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.photo_camera,
-                        color: colorScheme.onSurface,
-                      ),
-                      onPressed: _isImportingPhoto ? null : _importFromCamera,
-                      tooltip: 'Import from Camera',
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.photo_library,
-                        color: colorScheme.onSurface,
-                      ),
-                      onPressed: _isImportingPhoto ? null : _importFromGallery,
-                      tooltip: 'Import from Gallery',
-                    ),
-                    IconButton(
-                      icon: Icon(
-                        Icons.cleaning_services,
-                        color: colorScheme.onSurface.withValues(alpha: 0.7),
-                      ),
-                      onPressed: () =>
-                          setState(() => _selectedColor = Colors.black),
-                      tooltip: 'Eraser',
-                    ),
-                    IconButton(
-                      icon: const Icon(
-                        Icons.delete_forever,
-                        color: AppPalette.statusDanger,
-                      ),
-                      onPressed: () {
-                        _saveToHistory();
-                        setState(
-                          () => _pixels = List.filled(4096, Colors.black),
-                        );
-                      },
-                      tooltip: 'Clear All',
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
+            return Align(
+              alignment: Alignment.bottomCenter,
+              child: editorContent,
+            );
+          },
         ),
       ),
     );

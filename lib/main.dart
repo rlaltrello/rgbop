@@ -6,9 +6,11 @@ import 'setup_screen.dart';
 import 'dashboard_screen.dart';
 import 'spotify_auth_callback_controller.dart';
 import 'rgbop_mdns_service.dart'; // Add your mDNS service here
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 Future<void> main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+  WidgetsBinding widgetsBinding = WidgetsFlutterBinding.ensureInitialized();
+  FlutterNativeSplash.preserve(widgetsBinding: widgetsBinding);
   await SpotifyAuthCallbackController.instance.init();
   runApp(const RGBopApp());
 }
@@ -89,6 +91,9 @@ class _BootRouterState extends State<BootRouter> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      FlutterNativeSplash.remove();
+    });
     _loadRecentHosts();
     _refreshPanels();
     _checkFirstLaunch();

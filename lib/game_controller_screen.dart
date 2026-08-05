@@ -8,6 +8,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/scheduler.dart';
 import 'package:http/http.dart' as http;
 import 'app_palette.dart';
+import 'demo/demo_mode_controller.dart';
+import 'widgets/virtual_matrix_view.dart';
 
 class GameControllerScreen extends StatefulWidget {
   final String panelIp;
@@ -56,16 +58,18 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
   int? _joystickPointerId;
   bool _joystickRepaintQueued = false;
 
+  bool get _isDemoMode => DemoModeController.instance.isDemoIp(widget.panelIp);
+
   @override
   void dispose() {
     _repeatTimer?.cancel();
     _socketSubscription?.cancel();
-    _hardTeardownLocal();
+    _hardTeardownLocal(updateUi: false);
     unawaited(_sendStopRequestRemote());
     super.dispose();
   }
 
-  void _hardTeardownLocal() {
+  void _hardTeardownLocal({bool updateUi = true}) {
     _repeatTimer?.cancel();
     _repeatTimer = null;
 
@@ -88,7 +92,7 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
       } catch (_) {}
     }
 
-    if (mounted) {
+    if (updateUi && mounted) {
       setState(() {
         _upPressed = false;
         _downPressed = false;
@@ -104,6 +108,16 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
 
   Future<void> _startGameMode() async {
     if (_isConnecting || _isGameModeActive || _isStopping) return;
+
+    if (_isDemoMode) {
+      setState(() {
+        _isGameModeActive = true;
+        _statusText = 'Demo mode active. Virtual matrix connected.';
+      });
+      _startRepeatTimer();
+      _sendInputFrame(force: true);
+      return;
+    }
 
     final currentEpoch = ++_lifecycleEpoch;
 
@@ -163,6 +177,10 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
   }
 
   Future<void> _connectInputSocket(int sessionEpoch) async {
+    if (_isDemoMode) {
+      return;
+    }
+
     if (!_isGameModeActive || _isStopping || _isSocketConnecting) return;
     if (_webSocket != null && _webSocket!.readyState == WebSocket.open) return;
 
@@ -270,6 +288,15 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
   Future<void> _stopGameMode() async {
     if (_isStopping) return;
 
+    if (_isDemoMode) {
+      _repeatTimer?.cancel();
+      setState(() {
+        _isGameModeActive = false;
+        _statusText = 'Demo mode stopped.';
+      });
+      return;
+    }
+
     ++_lifecycleEpoch;
 
     setState(() {
@@ -289,6 +316,8 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
   }
 
   Future<void> _sendStopRequestRemote() async {
+    if (_isDemoMode) return;
+
     final client = http.Client();
     try {
       await client
@@ -308,6 +337,31 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
   }
 
   void _sendInputFrame({bool force = false}) {
+    if (_isDemoMode) {
+      if (!_isGameModeActive || _isStopping) return;
+
+      final buttons = _buildButtonMask() & 0xFF;
+      final now = DateTime.now();
+      final dueToHeartbeat =
+          _lastFrameSentAt == null ||
+          now.difference(_lastFrameSentAt!) >= _heartbeatInterval;
+      final stateChanged = buttons != _lastButtonsSent;
+
+      if (!force && !stateChanged && !dueToHeartbeat) return;
+
+      final seq = _sequence & 0xFF;
+      _sequence = (_sequence + 1) & 0xFF;
+      _lastButtonsSent = buttons;
+      _lastFrameSentAt = now;
+
+      DemoModeController.instance.applyInputFrame(
+        seq: seq,
+        buttons: buttons,
+        game: _selectedGame,
+      );
+      return;
+    }
+
     final socket = _webSocket;
     if (!_isGameModeActive ||
         _isStopping ||
@@ -657,7 +711,7 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
   @override
   Widget build(BuildContext context) {
     final bool socketOpen =
-        _webSocket != null && _webSocket!.readyState == WebSocket.open;
+        _isDemoMode || (_webSocket != null && _webSocket!.readyState == WebSocket.open);
 
     return Scaffold(
       appBar: AppBar(title: const Text('Game Controller')),
@@ -792,6 +846,45 @@ class _GameControllerScreenState extends State<GameControllerScreen> {
               ],
             ),
             const SizedBox(height: 20),
+
+            if (_isDemoMode)
+              AnimatedBuilder(
+                animation: DemoModeController.instance,
+                builder: (context, _) {
+                  return Card(
+                    color: AppPalette.surfacePanel.withValues(alpha: 0.45),
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Virtual Matrix Preview',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'seq=${DemoModeController.instance.lastSeq} buttons=${DemoModeController.instance.lastButtons}',
+                            style: const TextStyle(color: Colors.white70),
+                          ),
+                          const SizedBox(height: 12),
+                          Center(
+                            child: VirtualMatrixView(
+                              pixels: DemoModeController.instance.matrix,
+                              size: 240,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                },
+              ),
+            if (_isDemoMode) const SizedBox(height: 16),
+
             AbsorbPointer(
               absorbing: !_isGameModeActive || !socketOpen,
               child: Opacity(

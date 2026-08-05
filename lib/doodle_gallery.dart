@@ -10,6 +10,7 @@ import 'doodle_editor.dart';
 import 'panel_storage_info.dart';
 import 'rgbop_mdns_service.dart';
 import 'app_palette.dart';
+import 'demo/demo_mode_controller.dart';
 
 class DoodleItem {
   final String filename;
@@ -67,6 +68,12 @@ class _DoodleGalleryState extends State<DoodleGallery> {
     return widget.offlineMode || routeIp == null || routeIp.isEmpty;
   }
 
+  bool get _isDemoMode {
+    return DemoModeController.instance.isEnabled &&
+        (widget.offlineMode ||
+            DemoModeController.instance.isDemoIp(widget.panelIp));
+  }
+
   Future<String> _resolvePanelBaseUrl() async {
     final routeIp = widget.panelIp?.trim();
     if (routeIp != null && routeIp.isNotEmpty) {
@@ -107,6 +114,49 @@ class _DoodleGalleryState extends State<DoodleGallery> {
 
   Future<void> _loadAllDoodles() async {
     setState(() => _isLoading = true);
+
+    if (_isDemoMode) {
+      final map = <String, DoodleItem>{};
+      final demo = DemoModeController.instance;
+
+      for (final entry in demo.localDoodles.entries) {
+        final pixels = _parseRGB565(entry.value);
+        final key = _canonicalDoodleKey(entry.key);
+        map[key] = DoodleItem(
+          filename: entry.key,
+          isLocal: true,
+          isRemote: false,
+          pixels: pixels,
+        );
+      }
+
+      for (final entry in demo.remoteDoodles.entries) {
+        final pixels = _parseRGB565(entry.value);
+        final key = _canonicalDoodleKey(entry.key);
+        final existing = map[key];
+        map[key] = DoodleItem(
+          filename: existing?.filename ?? entry.key,
+          isLocal: existing?.isLocal ?? false,
+          isRemote: true,
+          localFile: existing?.localFile,
+          pixels: existing?.pixels ?? pixels,
+        );
+      }
+
+      final doodles = map.values.toList()
+        ..sort(
+          (a, b) =>
+              a.filename.toLowerCase().compareTo(b.filename.toLowerCase()),
+        );
+
+      if (!mounted) return;
+      setState(() {
+        _doodles = doodles;
+        _storageInfo = null;
+        _isLoading = false;
+      });
+      return;
+    }
 
     final map = <String, DoodleItem>{};
 
@@ -349,7 +399,9 @@ class _DoodleGalleryState extends State<DoodleGallery> {
     if (confirmed != true) return;
 
     try {
-      if (doodle.localFile != null && await doodle.localFile!.exists()) {
+      if (_isDemoMode) {
+        DemoModeController.instance.deleteLocalDoodle(doodle.filename);
+      } else if (doodle.localFile != null && await doodle.localFile!.exists()) {
         await doodle.localFile!.delete();
       }
       await _loadAllDoodles();
@@ -361,6 +413,19 @@ class _DoodleGalleryState extends State<DoodleGallery> {
 
   Future<void> _importRemoteDoodle(DoodleItem doodle) async {
     if (doodle.isLocal || !doodle.isRemote) return;
+    if (_isDemoMode) {
+      final imported = DemoModeController.instance.importRemoteDoodleToLocal(
+        doodle.filename,
+      );
+      if (imported) {
+        _showSnack('Imported ${doodle.filename} to local storage.');
+        await _loadAllDoodles();
+      } else {
+        _showSnack('Import failed. Demo remote doodle not found.');
+      }
+      return;
+    }
+
     if (_isOffline) {
       _showSnack('Offline mode: connect to a panel to import remote doodles.');
       return;
@@ -394,6 +459,26 @@ class _DoodleGalleryState extends State<DoodleGallery> {
 
   Future<void> _syncLocalToPanel() async {
     if (_isSyncing) return;
+    if (_isDemoMode) {
+      setState(() {
+        _isSyncing = true;
+        _syncProgress = 0;
+        _syncStatus = 'Syncing demo doodles...';
+      });
+      DemoModeController.instance.syncLocalDoodlesToRemote();
+      if (mounted) {
+        setState(() {
+          _syncProgress = 1;
+          _syncStatus =
+              'Sync complete. Uploaded local doodles to demo panel.';
+          _isSyncing = false;
+        });
+      }
+      await _loadAllDoodles();
+      _showSnack('Demo sync complete.');
+      return;
+    }
+
     if (_isOffline) {
       _showSnack('Offline mode: connect to a panel to sync doodles.');
       return;
@@ -583,7 +668,12 @@ class _DoodleGalleryState extends State<DoodleGallery> {
 
     final pixels = doodle.pixels;
     final file = doodle.localFile;
-    if (pixels == null || file == null) {
+    if (pixels == null) {
+      _showSnack('Local doodle data is missing or unreadable.');
+      return;
+    }
+
+    if (!_isDemoMode && file == null) {
       _showSnack('Local doodle data is missing or unreadable.');
       return;
     }
@@ -591,7 +681,12 @@ class _DoodleGalleryState extends State<DoodleGallery> {
     await Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => DoodleEditor(existingFile: file, initialPixels: pixels),
+        builder: (_) => DoodleEditor(
+          existingFile: _isDemoMode ? null : file,
+          initialPixels: pixels,
+          demoMode: _isDemoMode,
+          demoFilename: _isDemoMode ? doodle.filename : null,
+        ),
       ),
     );
 
@@ -601,7 +696,9 @@ class _DoodleGalleryState extends State<DoodleGallery> {
   Future<void> _createDoodle() async {
     await Navigator.push(
       context,
-      MaterialPageRoute(builder: (_) => const DoodleEditor()),
+      MaterialPageRoute(
+        builder: (_) => DoodleEditor(demoMode: _isDemoMode),
+      ),
     );
     await _loadAllDoodles();
   }
@@ -644,13 +741,17 @@ class _DoodleGalleryState extends State<DoodleGallery> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(_isOffline ? 'My Doodles (Offline)' : 'My Doodles'),
+        title: Text(
+          _isDemoMode
+              ? 'My Doodles (Demo)'
+              : (_isOffline ? 'My Doodles (Offline)' : 'My Doodles'),
+        ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: _loadAllDoodles,
           ),
-          if (!_isOffline)
+          if (!_isOffline || _isDemoMode)
             IconButton(
               icon: const Icon(Icons.sync),
               onPressed: _isSyncing ? null : _syncLocalToPanel,
@@ -683,7 +784,7 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                       ],
                     ),
                   ),
-                if (!_isOffline && _storageInfo != null)
+                if (!_isOffline && !_isDemoMode && _storageInfo != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: PanelStorageSection(info: _storageInfo!),
@@ -802,7 +903,7 @@ class _DoodleGalleryState extends State<DoodleGallery> {
                                             ),
                                           ),
                                         ),
-                                      if (!_isOffline &&
+                                      if ((!_isOffline || _isDemoMode) &&
                                           !doodle.isLocal &&
                                           doodle.isRemote)
                                         Positioned(

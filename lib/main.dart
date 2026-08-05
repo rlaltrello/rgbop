@@ -6,6 +6,7 @@ import 'setup_screen.dart';
 import 'dashboard_screen.dart';
 import 'spotify_auth_callback_controller.dart';
 import 'rgbop_mdns_service.dart'; // Add your mDNS service here
+import 'demo/demo_mode_controller.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 
 Future<void> main() async {
@@ -229,6 +230,19 @@ class _BootRouterState extends State<BootRouter> {
     final input = _manualHostCtrl.text.trim();
     if (input.isEmpty) return;
 
+    if (DemoModeController.instance.isDemoIp(input)) {
+      DemoModeController.instance.enable();
+      _selectPanel(
+        RGBopPanel(
+          ip: DemoModeController.demoPanelIp,
+          hostname: input,
+          displayName: 'Demo Panel',
+          isLegacyDiscovery: true,
+        ),
+      );
+      return;
+    }
+
     setState(() => _isManualConnecting = true);
     try {
       final panel = await _mdnsService.resolvePanelByHost(input);
@@ -254,6 +268,11 @@ class _BootRouterState extends State<BootRouter> {
   }
 
   void _selectPanel(RGBopPanel panel) {
+    if (DemoModeController.instance.isDemoIp(panel.ip)) {
+      DemoModeController.instance.enable();
+    } else {
+      DemoModeController.instance.disable();
+    }
     _rememberHost(panel.hostname);
     _rememberHost(panel.ip);
     Navigator.pushReplacementNamed(context, '/dashboard', arguments: panel.ip);

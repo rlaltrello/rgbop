@@ -11,6 +11,7 @@ import 'package:image/image.dart' as img;
 import 'package:path_provider/path_provider.dart';
 
 import 'app_palette.dart';
+import 'demo/demo_mode_controller.dart';
 import 'panel_storage_info.dart';
 
 enum _GifImportMode { preserveOriginal, fitTo64 }
@@ -99,6 +100,12 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     return widget.offlineMode || ip == null || ip.isEmpty;
   }
 
+  bool get _isDemoMode {
+    return DemoModeController.instance.isEnabled &&
+        (widget.offlineMode ||
+            DemoModeController.instance.isDemoIp(widget.panelIp));
+  }
+
   String? get _baseUrl {
     final ip = widget.panelIp?.trim();
     if (ip == null || ip.isEmpty) return null;
@@ -118,6 +125,54 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     setState(() => _isLoading = true);
     _localPreviewCache.clear();
     _remotePreviewCache.clear();
+
+    if (_isDemoMode) {
+      final itemsByName = <String, GifItem>{};
+      final demo = DemoModeController.instance;
+
+      for (final entry in demo.localGifs.entries) {
+        final key = _canonicalGifKey(entry.key);
+        itemsByName[key] = GifItem(
+          filename: entry.key,
+          isLocal: true,
+          isRemote: false,
+          remoteSize: entry.value.length,
+          remoteEnabled: true,
+        );
+      }
+
+      for (final entry in demo.remoteGifs.entries) {
+        final key = _canonicalGifKey(entry.key);
+        final existing = itemsByName[key];
+        itemsByName[key] = GifItem(
+          filename: existing?.filename ?? entry.key,
+          isLocal: existing?.isLocal ?? false,
+          isRemote: true,
+          localFile: existing?.localFile,
+          remoteSize: entry.value.bytes.length,
+          remoteEnabled: entry.value.enabled,
+        );
+      }
+
+      final gifs =
+          itemsByName.values
+              .where(
+                (gif) => !(gif.isRemote && !gif.isLocal && !gif.remoteEnabled),
+              )
+              .toList()
+            ..sort(
+              (a, b) =>
+                  a.filename.toLowerCase().compareTo(b.filename.toLowerCase()),
+            );
+
+      if (!mounted) return;
+      setState(() {
+        _gifs = gifs;
+        _storageInfo = null;
+        _isLoading = false;
+      });
+      return;
+    }
 
     final itemsByName = <String, GifItem>{};
     final gifDir = await _localGifDirectory();
@@ -277,7 +332,6 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
 
       final gifDir = await _localGifDirectory();
       final filename = sourcePath.split('/').last;
-      final destination = File('${gifDir.path}/$filename');
       final prepared = await _prepareGifForLocalSave(
         sourcePath,
         importMode,
@@ -285,13 +339,22 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
         decodedGif: decoded,
       );
 
-      final tempPath = '${destination.path}.tmp';
-      final tempFile = File(tempPath);
-      await tempFile.writeAsBytes(prepared.bytes, flush: true);
-      if (await destination.exists()) {
-        await destination.delete();
+      if (_isDemoMode) {
+        DemoModeController.instance.saveLocalGif(
+          filename,
+          Uint8List.fromList(prepared.bytes),
+        );
+      } else {
+        final destination = File('${gifDir.path}/$filename');
+
+        final tempPath = '${destination.path}.tmp';
+        final tempFile = File(tempPath);
+        await tempFile.writeAsBytes(prepared.bytes, flush: true);
+        if (await destination.exists()) {
+          await destination.delete();
+        }
+        await tempFile.rename(destination.path);
       }
-      await tempFile.rename(destination.path);
 
       if (!prepared.transformed) {
         if (importMode == _GifImportMode.preserveOriginal &&
@@ -482,7 +545,9 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     if (confirmed != true) return;
 
     try {
-      if (gif.localFile != null && await gif.localFile!.exists()) {
+      if (_isDemoMode) {
+        DemoModeController.instance.deleteLocalGif(gif.filename);
+      } else if (gif.localFile != null && await gif.localFile!.exists()) {
         await gif.localFile!.delete();
       }
       await _loadAllGifs();
@@ -494,6 +559,19 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
 
   Future<void> _importRemoteGif(GifItem gif) async {
     if (gif.isLocal || !gif.isRemote) return;
+    if (_isDemoMode) {
+      final imported = DemoModeController.instance.importRemoteGifToLocal(
+        gif.filename,
+      );
+      if (imported) {
+        _showSnack('Imported ${gif.filename} to local storage.');
+        await _loadAllGifs();
+      } else {
+        _showSnack('Import failed. Demo remote GIF not found.');
+      }
+      return;
+    }
+
     if (_isOffline) {
       _showSnack('Offline mode: connect to a panel to import remote GIFs.');
       return;
@@ -528,6 +606,19 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
 
   Future<void> _toggleRemoteGif(GifItem gif) async {
     if (!gif.isRemote) return;
+    if (_isDemoMode) {
+      final ok = DemoModeController.instance.toggleRemoteGif(
+        gif.filename,
+        !gif.remoteEnabled,
+      );
+      if (ok) {
+        await _loadAllGifs();
+      } else {
+        _showSnack('Failed to toggle GIF state.');
+      }
+      return;
+    }
+
     if (_isOffline) {
       _showSnack('Offline mode: connect to a panel to toggle GIF visibility.');
       return;
@@ -560,6 +651,25 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
 
   Future<void> _syncLocalToPanel() async {
     if (_isSyncing) return;
+    if (_isDemoMode) {
+      setState(() {
+        _isSyncing = true;
+        _syncProgress = 0;
+        _syncStatus = 'Syncing demo GIF store...';
+      });
+      DemoModeController.instance.syncLocalGifsToRemote();
+      if (mounted) {
+        setState(() {
+          _syncProgress = 1;
+          _syncStatus = 'Sync complete. Uploaded local GIFs to demo panel.';
+          _isSyncing = false;
+        });
+      }
+      await _loadAllGifs();
+      _showSnack('Demo sync complete.');
+      return;
+    }
+
     if (_isOffline) {
       _showSnack('Offline mode: connect to a panel to sync GIFs.');
       return;
@@ -874,6 +984,25 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
   }
 
   Widget _buildGifPreview(GifItem gif) {
+    if (_isDemoMode) {
+      return FutureBuilder<Uint8List?>(
+        future: _loadDemoPreviewBytes(gif),
+        builder: (context, snapshot) {
+          final bytes = snapshot.data;
+          if (bytes == null) {
+            return const Icon(Icons.broken_image, color: Colors.grey, size: 32);
+          }
+          return Image.memory(
+            bytes,
+            fit: BoxFit.cover,
+            gaplessPlayback: true,
+            errorBuilder: (context, error, stackTrace) =>
+                const Icon(Icons.broken_image, color: Colors.grey, size: 32),
+          );
+        },
+      );
+    }
+
     final image = gif.isLocal && gif.localFile != null
         ? FutureBuilder<Uint8List?>(
             future: _loadLocalPreviewBytes(gif.localFile!),
@@ -931,6 +1060,18 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     );
   }
 
+  Future<Uint8List?> _loadDemoPreviewBytes(GifItem gif) async {
+    final demo = DemoModeController.instance;
+    final bytes = demo.getLocalGifBytes(gif.filename) ??
+        demo.getRemoteGifBytes(gif.filename);
+    if (bytes == null) return null;
+
+    final decoded = img.decodeGif(bytes) ?? img.decodeImage(bytes);
+    if (decoded == null) return null;
+    final frame = decoded.hasAnimation ? decoded.getFrame(0) : decoded;
+    return Uint8List.fromList(img.encodePng(frame));
+  }
+
   Future<Uint8List?> _loadLocalPreviewBytes(File file) async {
     final path = file.path;
     final cached = _localPreviewCache[path];
@@ -951,6 +1092,15 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
   }
 
   Future<Uint8List?> _loadRemotePreviewBytes(String filename) async {
+    if (_isDemoMode) {
+      final remote = DemoModeController.instance.getRemoteGifBytes(filename);
+      if (remote == null) return null;
+      final decoded = img.decodeGif(remote) ?? img.decodeImage(remote);
+      if (decoded == null) return null;
+      final frame = decoded.hasAnimation ? decoded.getFrame(0) : decoded;
+      return Uint8List.fromList(img.encodePng(frame));
+    }
+
     final cacheKey = _canonicalGifKey(filename);
     final cached = _remotePreviewCache[cacheKey];
     if (cached != null) return cached;
@@ -1028,10 +1178,14 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
     return Scaffold(
       backgroundColor: theme.scaffoldBackgroundColor,
       appBar: AppBar(
-        title: Text(_isOffline ? 'My GIFs (Offline)' : 'My GIFs'),
+        title: Text(
+          _isDemoMode
+              ? 'My GIFs (Demo)'
+              : (_isOffline ? 'My GIFs (Offline)' : 'My GIFs'),
+        ),
         actions: [
           IconButton(icon: const Icon(Icons.refresh), onPressed: _loadAllGifs),
-          if (!_isOffline)
+          if (!_isOffline || _isDemoMode)
             IconButton(
               icon: const Icon(Icons.sync),
               onPressed: _isSyncing ? null : _syncLocalToPanel,
@@ -1076,7 +1230,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                       ],
                     ),
                   ),
-                if (!_isOffline && _storageInfo != null)
+                if (!_isOffline && !_isDemoMode && _storageInfo != null)
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                     child: PanelStorageSection(info: _storageInfo!),
@@ -1202,7 +1356,8 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                                         ),
                                       ),
                                     ),
-                                    if (!_isOffline && gif.isRemote)
+                                    if ((!_isOffline || _isDemoMode) &&
+                                        gif.isRemote)
                                       Positioned(
                                         top: 4,
                                         right: 4,
@@ -1247,7 +1402,7 @@ class _GifManagerScreenState extends State<GifManagerScreen> {
                                           ),
                                         ),
                                       ),
-                                    if (!_isOffline &&
+                                    if ((!_isOffline || _isDemoMode) &&
                                         !gif.isLocal &&
                                         gif.isRemote)
                                       Positioned(

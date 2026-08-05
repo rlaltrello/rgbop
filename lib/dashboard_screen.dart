@@ -11,6 +11,7 @@ import 'package:geolocator/geolocator.dart';
 import 'doodle_gallery.dart';
 import 'spotify_auth_callback_controller.dart';
 import 'app_palette.dart';
+import 'demo/demo_mode_controller.dart';
 
 enum RadarTimeFormat { off, format12h, format24h }
 
@@ -73,6 +74,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       TextEditingController();
   late final VoidCallback _spotifyCallbackListener;
   String? _lastHandledSpotifyCallbackUri;
+
+  bool get _isDemoMode => DemoModeController.instance.isDemoIp(_panelIp);
 
   String _formatHour(int h) {
     if (h == 0) return "12 AM";
@@ -302,7 +305,64 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _fetchSettings();
   }
 
+  void _exitDemoMode() {
+    DemoModeController.instance.disable();
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, '/');
+  }
+
   Future<void> _fetchSettings() async {
+    if (_isDemoMode) {
+      final data = DemoModeController.instance.settings;
+      setState(() {
+        _panelName = (data['panelName'] ?? data['name'] ?? _panelName)
+            .toString()
+            .trim();
+        if (_panelName.isEmpty) {
+          _panelName = 'Demo Panel';
+        }
+        _showGifs = data['gifs'] ?? true;
+        _showClock = data['clock'] ?? true;
+        _showDate = data['date'] ?? true;
+        _showWeather = data['weather'] ?? true;
+        _showRadar = data['radar'] ?? true;
+        _radarTimeFormat = _parseRadarTimeFormat(data['radarTimeFormat']);
+        _radarUnitFormat = _parseRadarUnitFormat(data['radarUnitFormat']);
+        _radarZoomLevel = _parseRadarZoomLevel(data['radarZoomLevel']);
+        _showISS = data['iss'] ?? true;
+        _showPlanes = data['planes'] ?? true;
+        _showEarthquake = data['earthquake'] ?? true;
+        _showSpotify = data['spotify'] ?? true;
+        _spotifyShowOnPause = data['spotifyShowOnPause'] ?? true;
+        _spotifyShowOnlyAlbumArt = data['spotifyShowOnlyAlbumArt'] ?? false;
+        _showDiags = data['diags'] ?? true;
+        _showTextBlast = data['textblast'] ?? true;
+        _textBlastTextScale = data['textBlastTextScale'] ?? 1;
+        _textBlastCtrl.text = data['textBlastText'] ?? '';
+        _textBlastTextColor = data['textBlastTextColor'] ?? 0x00FFFF00;
+        _textBlastBackgroundColor =
+            data['textBlastBackgroundColor'] ?? 0x00000000;
+        _textBlastTextCustomMessage =
+            data['textBlastTextCustomMessage'] ?? false;
+        _textBlastCycles = data['textBlastCycles'] ?? 1;
+        _textBlastSpeed = (data['textBlastSpeed'] ?? 40.0).toDouble();
+        _showDoodles = data['doodles'] ?? true;
+        _brightness = (data['brightness'] ?? 128).toDouble();
+        _nightMode = data['nightMode'] ?? false;
+        _nightStart = data['nightStart'] ?? 22;
+        _nightEnd = data['nightEnd'] ?? 6;
+        _transitionTime = data['transitionTime'] ?? 10;
+
+        _latCtrl.text = (data['lat'] ?? 34.16).toString();
+        _lngCtrl.text = (data['lng'] ?? -84.80).toString();
+        _osUserCtrl.text = data['osUser'] ?? '';
+        _osPassCtrl.text = data['osPass'] ?? '';
+        _spotifyRefreshTokenCtrl.text = data['spotifyRefreshToken'] ?? '';
+        _isLoading = false;
+      });
+      return;
+    }
+
     try {
       final response = await http.get(
         Uri.parse('http://$_panelIp/api/settings'),
@@ -380,7 +440,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     setState(() => _isSaving = true);
     try {
-      final body = jsonEncode({
+      final payload = {
         "panelName": _panelName,
         "gifs": _showGifs,
         "clock": _showClock,
@@ -418,7 +478,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "nightStart": _nightStart,
         "nightEnd": _nightEnd,
         "transitionTime": _transitionTime,
-      });
+      };
+
+      if (_isDemoMode) {
+        DemoModeController.instance.saveSettings(payload);
+        if (successMessage.isNotEmpty) {
+          _showSuccess(successMessage);
+        }
+        return true;
+      }
+
+      final body = jsonEncode(payload);
 
       final response = await http.post(
         Uri.parse('http://$_panelIp/api/settings'),
@@ -510,6 +580,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _factoryResetPanel() async {
     if (_panelIp == null) return;
     setState(() => _isResetting = true);
+
+    if (_isDemoMode) {
+      DemoModeController.instance.resetPanel();
+      await _fetchSettings();
+      if (mounted) {
+        _showSuccess('Demo panel reset.');
+        setState(() => _isResetting = false);
+      }
+      return;
+    }
 
     try {
       final response = await http.post(Uri.parse('http://$_panelIp/api/reset'));
@@ -867,8 +947,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
             padding: const EdgeInsets.only(left: 8),
           ),
         ),
-        title: const Text("RGBop Control"),
+        title: Text(_isDemoMode ? "RGBop Control (Demo)" : "RGBop Control"),
         actions: [
+          if (_isDemoMode)
+            TextButton.icon(
+              onPressed: _exitDemoMode,
+              icon: const Icon(Icons.logout, size: 18),
+              label: const Text('Exit Demo'),
+              style: TextButton.styleFrom(
+                foregroundColor: AppPalette.statusWarning,
+              ),
+            ),
           IconButton(
             icon: const Icon(Icons.help_outline, color: AppPalette.brandAccent),
             tooltip: 'Dashboard Help',
@@ -943,6 +1032,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ],
             ),
           ),
+
+          if (_isDemoMode)
+            Container(
+              margin: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppPalette.brandAccent.withValues(alpha: 0.2),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppPalette.brandAccent),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.science, color: AppPalette.brandAccent),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Demo Mode active: no hardware required. Changes are simulated locally for App Review.',
+                      style: TextStyle(color: Colors.white70),
+                    ),
+                  ),
+                ],
+              ),
+            ),
 
           // --- WIDGET TOGGLES ---
           Card(
@@ -1618,7 +1730,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
             subtitle: "Upload and delete panel animations",
             onTap: () {
               FocusScope.of(context).unfocus();
-              if (_panelIp != null) {
+              if (_isDemoMode) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const GifManagerScreen(offlineMode: true),
+                  ),
+                );
+              } else if (_panelIp != null) {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -1638,6 +1757,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
             subtitle: "Let your creativity shine!",
             onTap: () {
               FocusScope.of(context).unfocus();
+              if (_isDemoMode) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const DoodleGallery(offlineMode: true),
+                  ),
+                );
+                return;
+              }
               if (_panelIp == null || _panelIp!.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(

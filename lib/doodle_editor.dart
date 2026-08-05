@@ -8,13 +8,22 @@ import 'package:image/image.dart' as img;
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'app_palette.dart';
+import 'demo/demo_mode_controller.dart';
 
 class DoodleEditor extends StatefulWidget {
   final int gridSize = 64;
   final File? existingFile;
   final List<Color>? initialPixels;
+  final bool demoMode;
+  final String? demoFilename;
 
-  const DoodleEditor({super.key, this.existingFile, this.initialPixels});
+  const DoodleEditor({
+    super.key,
+    this.existingFile,
+    this.initialPixels,
+    this.demoMode = false,
+    this.demoFilename,
+  });
   @override
   State<DoodleEditor> createState() => _DoodleEditorState();
 }
@@ -25,6 +34,7 @@ class _DoodleEditorState extends State<DoodleEditor> {
   final ImagePicker _imagePicker = ImagePicker();
 
   File? _currentFile;
+  String? _demoFilename;
 
   bool _isZoomMode = false;
   bool _isFillMode = false;
@@ -40,6 +50,7 @@ class _DoodleEditorState extends State<DoodleEditor> {
   void initState() {
     super.initState();
     _currentFile = widget.existingFile;
+    _demoFilename = widget.demoFilename;
 
     _pixels =
         widget.initialPixels != null &&
@@ -63,6 +74,21 @@ class _DoodleEditorState extends State<DoodleEditor> {
 
   Future<void> _saveDoodleLocally() async {
     try {
+      if (widget.demoMode) {
+        _demoFilename ??= 'doodle_${DateTime.now().millisecondsSinceEpoch}.bin';
+        DemoModeController.instance.saveLocalDoodle(
+          _demoFilename!,
+          _convertToRGB565(),
+        );
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Saved locally: $_demoFilename')),
+          );
+          setState(() {});
+        }
+        return;
+      }
+
       if (_currentFile == null) {
         final directory = await getApplicationDocumentsDirectory();
         _currentFile = File(

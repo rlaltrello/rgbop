@@ -16,6 +16,16 @@ class SetupScreen extends StatelessWidget {
       child: Scaffold(
         backgroundColor: AppPalette.surfacePage, // Dark, sleek appliance vibe
         appBar: AppBar(
+          leadingWidth: 130,
+          leading: TextButton.icon(
+            onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+            icon: const Icon(Icons.arrow_back, size: 18),
+            label: const Text('Back to Wi-Fi'),
+            style: TextButton.styleFrom(
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.only(left: 8),
+            ),
+          ),
           title: const Text("RGBop Setup"),
           backgroundColor: Colors.transparent,
           elevation: 0,

@@ -283,12 +283,21 @@ class _BootRouterState extends State<BootRouter> {
     await _connectManualHost();
   }
 
+  void _openBluetoothSetup() {
+    Navigator.pushReplacementNamed(context, '/setup');
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: const Text('Choose Panel'),
         actions: [
+          IconButton(
+            onPressed: _openBluetoothSetup,
+            icon: const Icon(Icons.bluetooth),
+            tooltip: 'Set up new panel over Bluetooth',
+          ),
           IconButton(
             onPressed: _isScanning ? null : _refreshPanels,
             icon: const Icon(Icons.refresh),
@@ -338,6 +347,25 @@ class _BootRouterState extends State<BootRouter> {
                       ),
               ),
               onSubmitted: (_) => _connectManualHost(),
+            ),
+            const SizedBox(height: 12),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  side: const BorderSide(color: AppPalette.brandAccent),
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                ),
+                onPressed: _openBluetoothSetup,
+                icon: const Icon(
+                  Icons.bluetooth,
+                  color: AppPalette.brandAccent,
+                ),
+                label: const Text(
+                  'Set Up New Panel (Bluetooth)',
+                  style: TextStyle(color: AppPalette.brandAccent),
+                ),
+              ),
             ),
             const SizedBox(height: 12),
             SizedBox(
@@ -499,9 +527,7 @@ class _BootRouterState extends State<BootRouter> {
                       fontSize: 16,
                     ),
                   ),
-                  onPressed: () {
-                    Navigator.pushReplacementNamed(context, '/setup');
-                  },
+                  onPressed: _openBluetoothSetup,
                 ),
               ),
             ],

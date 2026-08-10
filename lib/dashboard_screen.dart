@@ -39,6 +39,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _showGifs = true;
   bool _showDate = true;
   bool _showWeather = true;
+  bool _weatherUnitFahrenheit = true;
   bool _showRadar = true;
   bool _showISS = true;
   bool _showPlanes = true;
@@ -81,6 +82,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (h == 0) return "12 AM";
     if (h == 12) return "12 PM";
     return h > 12 ? "${h - 12} PM" : "$h AM";
+  }
+
+  String _formatWeatherUnitFormatLabel(bool isFahrenheit) {
+    return isFahrenheit ? 'Fahrenheit (°F)' : 'Celsius (°C)';
   }
 
   String _formatRadarTimeFormatLabel(RadarTimeFormat format) {
@@ -325,6 +330,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _showClock = data['clock'] ?? true;
         _showDate = data['date'] ?? true;
         _showWeather = data['weather'] ?? true;
+        _weatherUnitFahrenheit = data['weatherUnitFahrenheit'] ?? true;
         _showRadar = data['radar'] ?? true;
         _radarTimeFormat = _parseRadarTimeFormat(data['radarTimeFormat']);
         _radarUnitFormat = _parseRadarUnitFormat(data['radarUnitFormat']);
@@ -381,6 +387,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _showClock = data['clock'] ?? true;
           _showDate = data['date'] ?? true;
           _showWeather = data['weather'] ?? true;
+          _weatherUnitFahrenheit = data['weatherUnitFahrenheit'] ?? true;
           _showRadar = data['radar'] ?? true;
           _radarTimeFormat = _parseRadarTimeFormat(data['radarTimeFormat']);
           _radarUnitFormat = _parseRadarUnitFormat(data['radarUnitFormat']);
@@ -446,6 +453,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         "clock": _showClock,
         "date": _showDate,
         "weather": _showWeather,
+        "weatherUnitFahrenheit": _weatherUnitFahrenheit,
         "radar": _showRadar,
         "radarTimeFormat": _serializeRadarTimeFormat(_radarTimeFormat),
         "radarUnitFormat": _serializeRadarUnitFormat(_radarUnitFormat),
@@ -1096,6 +1104,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   value: _showWeather,
                   onChanged: (v) => setState(() => _showWeather = v),
                 ),
+                if (_showWeather)
+                    Theme(
+                    data: Theme.of(
+                      context,
+                    ).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      initiallyExpanded: false,
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      backgroundColor: Colors.black.withValues(alpha: 0.2),
+                      title: const Padding(
+                        padding: EdgeInsets.only(left: 12.0),
+                        child: Text(
+                          "Weather Settings",
+                          style: TextStyle(
+                            color: AppPalette.brandAccent,
+                            fontSize: 14,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+
+                              const SizedBox(height: 12),
+                              DropdownButtonFormField<bool>(
+                                initialValue: _weatherUnitFahrenheit,
+                                decoration: const InputDecoration(
+                                  labelText: "Weather Unit",
+                                  border: OutlineInputBorder(),
+                                ),
+                                dropdownColor: const Color(0xFF2A2A2A),
+                                items: [true, false]
+                                    .map(
+                                      (isFahrenheit) => DropdownMenuItem(
+                                        value: isFahrenheit,
+                                        child: Text(
+                                          _formatWeatherUnitFormatLabel(isFahrenheit),
+                                        ),
+                                      ),
+                                    )
+                                    .toList(),
+                                onChanged: (value) {
+                                  if (value != null) {
+                                    setState(() => _weatherUnitFahrenheit = value);
+                                  }
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                              
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 SwitchListTile(
                   title: const Text("Radar"),
                   value: _showRadar,

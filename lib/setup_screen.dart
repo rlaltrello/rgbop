@@ -172,10 +172,7 @@ class SetupScreen extends StatelessWidget {
                                   if (!context.mounted) return;
 
                                   // 3. Safe to navigate
-                                  Navigator.pushReplacementNamed(
-                                    context,
-                                    '/dashboard',
-                                  );
+                                  Navigator.pushNamed(context, '/dashboard');
                                 }
                               },
                         child: provider.isSending

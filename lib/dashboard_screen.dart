@@ -113,6 +113,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     };
   }
 
+  void _exitDashboard() {
+    final navigator = Navigator.of(context);
+        if (navigator.canPop()) {
+          navigator.pop();
+        } else {
+          navigator.pushReplacementNamed('/');
+    }
+  }
+
   RadarTimeFormat _parseRadarTimeFormat(dynamic value) {
     final raw = value?.toString();
     return switch (raw) {
@@ -864,7 +873,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         appBar: AppBar(
           leadingWidth: 86,
           leading: TextButton.icon(
-            onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+            onPressed: _exitDashboard,
             icon: const Icon(Icons.arrow_back, size: 18),
             label: const Text('Exit'),
             style: TextButton.styleFrom(
@@ -947,7 +956,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       appBar: AppBar(
         leadingWidth: 86,
         leading: TextButton.icon(
-          onPressed: () => Navigator.pushReplacementNamed(context, '/'),
+          onPressed: _exitDashboard,
           icon: const Icon(Icons.arrow_back, size: 18),
           label: const Text('Exit'),
           style: TextButton.styleFrom(

@@ -275,7 +275,7 @@ class _BootRouterState extends State<BootRouter> {
     }
     _rememberHost(panel.hostname);
     _rememberHost(panel.ip);
-    Navigator.pushReplacementNamed(context, '/dashboard', arguments: panel.ip);
+    Navigator.pushNamed(context, '/dashboard', arguments: panel.ip);
   }
 
   Future<void> _connectRememberedHost(String hostOrIp) async {

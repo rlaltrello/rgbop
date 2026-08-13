@@ -32,6 +32,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _connectionFailed = false;
   bool _isSaving = false;
   bool _isResetting = false;
+  bool _isRebooting = false;
   bool _isAuthorizingSpotify = false;
   bool _isStartingBleProvisioning = false;
 
@@ -628,6 +629,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+    Future<void> _rebootPanel() async {
+    if (_panelIp == null) return;
+    setState(() => _isRebooting = true);
+
+    if (_isDemoMode) {
+      DemoModeController.instance.resetPanel();
+      await _fetchSettings();
+      if (mounted) {
+        _showSuccess('Demo panel reset.');
+        setState(() => _isRebooting = false);
+      }
+      return;
+    }
+
+    try {
+      final response = await http.post(Uri.parse('http://$_panelIp/api/reboot'));
+      if (response.statusCode == 200) {
+        if (mounted) Navigator.pushReplacementNamed(context, '/');
+      } else {
+        _showError("Panel rejected the command.");
+      }
+    } catch (e) {
+      _showError("Network error. Panel might already be rebooting.");
+      if (mounted) Navigator.pushReplacementNamed(context, '/');
+    }
+    if (mounted) setState(() => _isRebooting = false);
+  }
+
   Future<void> _factoryResetPanel() async {
     if (_panelIp == null) return;
     setState(() => _isResetting = true);
@@ -692,6 +721,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 'Got It',
                 style: TextStyle(color: Colors.white),
               ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmReboot() async {
+    return showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          backgroundColor: AppPalette.surfacePanel,
+          title: const Row(
+            children: [
+              Icon(Icons.warning_amber_rounded, color: AppPalette.statusWarning),
+              SizedBox(width: 8),
+              Text(
+                "Reboot Panel?",
+                style: TextStyle(color: AppPalette.statusWarning),
+              ),
+            ],
+          ),
+          content: const Text(
+            "This will reboot the panel. Are you absolutely sure?",
+            style: TextStyle(color: Colors.white70),
+          ),
+          actions: [
+            TextButton(
+              child: const Text("Cancel", style: TextStyle(color: Colors.grey)),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
+            TextButton(
+              style: TextButton.styleFrom(
+                foregroundColor: AppPalette.statusWarning,
+              ),
+              child: const Text(
+                "Yes, Reboot Panel",
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              onPressed: () {
+                Navigator.of(context).pop();
+                _rebootPanel();
+              },
             ),
           ],
         );
@@ -2176,10 +2250,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
-                    child: OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: AppPalette.brandAccent,
-                        side: const BorderSide(color: AppPalette.brandAccent),
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppPalette.brandAccent,
+                        foregroundColor: Colors.white,
                         padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
                       onPressed: _isStartingBleProvisioning
@@ -2202,6 +2276,28 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ],
               ),
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          // --- DANGER ZONE ---
+          ElevatedButton.icon(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppPalette.statusWarning.withValues(alpha: 0.2),
+              foregroundColor: AppPalette.statusWarning,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+            ),
+            onPressed: _isRebooting ? null : _confirmReboot,
+            icon: _isRebooting
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(),
+                  )
+                : const Icon(Icons.warning_amber_rounded),
+            label: const Text(
+              "REBOOT PANEL",
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
           const SizedBox(height: 32),

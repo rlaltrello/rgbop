@@ -33,6 +33,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   bool _isSaving = false;
   bool _isResetting = false;
   bool _isAuthorizingSpotify = false;
+  bool _isStartingBleProvisioning = false;
 
   // --- Settings State ---
   bool _showClock = true;
@@ -591,6 +592,39 @@ class _DashboardScreenState extends State<DashboardScreen> {
         setState(() => _isAuthorizingSpotify = false);
       }
       _showError('Could not open Spotify login.');
+    }
+  }
+
+  Future<void> _startBleProvisioning() async {
+    if (_panelIp == null || _isStartingBleProvisioning) return;
+
+    if (_isDemoMode) {
+      _showError('Bluetooth reprovisioning is unavailable in Demo Mode.');
+      return;
+    }
+
+    setState(() => _isStartingBleProvisioning = true);
+
+    try {
+      final response = await http
+          .post(Uri.parse('http://$_panelIp/api/start-ble'))
+          .timeout(const Duration(seconds: 5));
+
+      if (response.statusCode != 200) {
+        _showError('Could not start Bluetooth setup: ${response.statusCode}');
+        return;
+      }
+
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/setup');
+    } on TimeoutException {
+      _showError('The panel did not respond while starting Bluetooth setup.');
+    } catch (_) {
+      _showError('Could not start Bluetooth setup on the panel.');
+    } finally {
+      if (mounted) {
+        setState(() => _isStartingBleProvisioning = false);
+      }
     }
   }
 
@@ -2113,6 +2147,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             : _spotifyRefreshTokenCtrl.text.isEmpty
                             ? "Connect Spotify"
                             : "Reconnect Spotify",
+                        style: const TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          // --- WIFI REPROVISIONING ---
+          Card(
+            color: AppPalette.surfacePanel,
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                children: [
+                  _buildDashboardSectionHeader(
+                    title: 'WiFi Reprovisioning',
+                    icon: Icons.bluetooth_searching,
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Start Bluetooth setup on the panel to connect it to a different WiFi network without resetting its saved settings.',
+                    style: TextStyle(color: Colors.white70, height: 1.4),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: AppPalette.brandAccent,
+                        side: const BorderSide(color: AppPalette.brandAccent),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      onPressed: _isStartingBleProvisioning
+                          ? null
+                          : _startBleProvisioning,
+                      icon: _isStartingBleProvisioning
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.bluetooth_searching),
+                      label: Text(
+                        _isStartingBleProvisioning
+                            ? 'Starting Bluetooth Setup...'
+                            : 'Change WiFi via Bluetooth',
                         style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
                     ),

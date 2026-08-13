@@ -3,18 +3,71 @@ import 'package:provider/provider.dart';
 import 'app_palette.dart';
 import 'provisioning_provider.dart';
 
-class SetupScreen extends StatelessWidget {
-  SetupScreen({super.key});
+class SetupScreen extends StatefulWidget {
+  const SetupScreen({super.key});
 
-  final TextEditingController _ssidController = TextEditingController();
-  final TextEditingController _passController = TextEditingController();
+  @override
+  State<SetupScreen> createState() => _SetupScreenState();
+}
+
+class _SetupScreenState extends State<SetupScreen> {
+  late final TextEditingController _ssidController;
+  late final TextEditingController _passController;
+  
+  // 1. Keep Provider instance stable across rebuilds
+  late final ProvisioningProvider _provisioningProvider;
+
+  // Track password visibility state
+  bool _obscurePassword = true;
+
+  void _triggerInitialScan() {
+    try {
+      (_provisioningProvider as dynamic).startScan();
+      return;
+    } catch (_) {}
+
+    try {
+      (_provisioningProvider as dynamic).scanForDevices();
+      return;
+    } catch (_) {}
+
+    try {
+      (_provisioningProvider as dynamic).beginScan();
+      return;
+    } catch (_) {}
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _ssidController = TextEditingController();
+    _passController = TextEditingController();
+    _provisioningProvider = ProvisioningProvider();
+    // Wait for post-frame rendering + 800ms for BLE hardware to advertise
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) {
+          _triggerInitialScan();
+        }
+      });
+    });
+  }
+
+  @override
+  void dispose() {
+    _ssidController.dispose();
+    _passController.dispose();
+    _provisioningProvider.dispose(); // Safely close BLE/connections on exit
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => ProvisioningProvider(),
+    // 2. ChangeNotifierProvider.value uses the STABLE instance from initState
+    return ChangeNotifierProvider.value(
+      value: _provisioningProvider,
       child: Scaffold(
-        backgroundColor: AppPalette.surfacePage, // Dark, sleek appliance vibe
+        backgroundColor: AppPalette.surfacePage,
         appBar: AppBar(
           leadingWidth: 130,
           leading: TextButton.icon(
@@ -127,9 +180,15 @@ class SetupScreen extends StatelessWidget {
                         ),
                       ),
                       const SizedBox(height: 16),
+
+                      // --- Password Field with Eyeball Toggle ---
                       TextField(
                         controller: _passController,
-                        obscureText: true,
+                        obscureText: _obscurePassword,
+                        enableSuggestions: false,
+                        autocorrect: false,
+                        textCapitalization: TextCapitalization.none,
+                        keyboardType: TextInputType.visiblePassword,
                         style: const TextStyle(color: Colors.white),
                         decoration: InputDecoration(
                           labelText: "Wi-Fi Password",
@@ -139,6 +198,19 @@ class SetupScreen extends StatelessWidget {
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(12),
                             borderSide: BorderSide.none,
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _obscurePassword
+                                  ? Icons.visibility_off
+                                  : Icons.visibility,
+                              color: Colors.white54,
+                            ),
+                            onPressed: () {
+                              setState(() {
+                                _obscurePassword = !_obscurePassword;
+                              });
+                            },
                           ),
                         ),
                       ),
@@ -162,17 +234,13 @@ class SetupScreen extends StatelessWidget {
                                 );
 
                                 if (success) {
-                                  // 1. Wait for 2 seconds to let the board reboot
                                   await Future.delayed(
                                     const Duration(seconds: 2),
                                   );
 
-                                  // 2. The crucial safety check!
-                                  // If the user closed the app during those 2 seconds, stop here.
                                   if (!context.mounted) return;
 
-                                  // 3. Safe to navigate
-                                  Navigator.pushNamed(context, '/dashboard');
+                                  Navigator.pushReplacementNamed(context, '/');
                                 }
                               },
                         child: provider.isSending
